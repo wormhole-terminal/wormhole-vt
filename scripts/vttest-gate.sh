@@ -16,8 +16,7 @@
 # vttest is fetched at its pinned version into a cache outside the repository and built there
 # (tools/vt-compare/fetch-suites.sh; it needs curl, make and a C compiler). Without it and without
 # a network the step is skipped with a warning, never failed. scripts/suites-gate.sh runs this
-# after the other outside suites, so scripts/check.sh runs it when the engine, the bench crate or
-# the terminal layer changed.
+# after the other outside suites, so CI runs it on every change.
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 . scripts/lib.sh
@@ -27,7 +26,7 @@ for arg in "$@"; do
   case "$arg" in
     --update) update=1 ;;
     --plan) plan=1 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
     *) die "unknown argument: $arg (see --help)" ;;
   esac
 done

@@ -14,9 +14,8 @@
 #
 # The suites are fetched at their pinned commits into a cache outside the repository
 # (tools/vt-compare/fetch-suites.sh). With no cache and no network (cloud sessions, a plane) the
-# step is skipped with a warning, never failed. scripts/check.sh runs it when the engine
-# (crates/wormhole-vt), the bench crate or the terminal layer (crates/wormhole-term) changed, and
-# with --all.
+# step is skipped with a warning, never failed. CI runs it on every change
+# (.github/workflows/engine.yml).
 set -uo pipefail
 cd "$(dirname "$0")/.." || exit 1
 . scripts/lib.sh
@@ -26,7 +25,7 @@ for arg in "$@"; do
   case "$arg" in
     --update) update=1 ;;
     --plan) plan=1 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,17p' "$0"; exit 0 ;;
     *) die "unknown argument: $arg (see --help)" ;;
   esac
 done
