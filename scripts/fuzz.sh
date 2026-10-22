@@ -28,6 +28,9 @@ export CARGO_TARGET_DIR="$BASE_TARGET/fuzz-nightly"
 
 need cargo-fuzz "Install it with: cargo install cargo-fuzz"
 rustup toolchain list | grep -q '^nightly' || die "no nightly toolchain. Install it with: rustup toolchain install nightly --profile minimal"
+# The compiler's own target, named: cargo-fuzz otherwise builds for the target it was built for, and
+# a prebuilt Linux cargo-fuzz is a musl binary, where the address sanitizer does not work.
+HOST="$(rustc +nightly -vV | sed -n 's/^host: //p')"
 
 cmd="${1:-}"; [ $# -gt 0 ] && shift
 case "$cmd" in
@@ -51,7 +54,7 @@ case "$cmd" in
     crates=$(for t in "${targets[@]}"; do crate_of "$t"; done | sort -u)
     for c in $crates; do
       [ -d "$ROOT/crates/$c/fuzz/corpus" ] || scripts/fuzz.sh seeds || exit 1
-      (cd "$ROOT/crates/$c" && cargo +nightly fuzz build) || exit 1
+      (cd "$ROOT/crates/$c" && cargo +nightly fuzz build --target "$HOST") || exit 1
     done
     status=0
     # Batches of at most $jobs targets; in each, one process per target runs plain, and a target
@@ -65,7 +68,7 @@ case "$cmd" in
         workers=()
         [ "$each" -gt 1 ] && workers=(-jobs="$each" -workers="$each")
         # shellcheck disable=SC2046  # libfuzzer_args is a list of words on purpose
-        (cd "$ROOT/crates/$(crate_of "$t")" && exec nice -n 10 cargo +nightly fuzz run "$t" -- $(libfuzzer_args "$t") \
+        (cd "$ROOT/crates/$(crate_of "$t")" && exec nice -n 10 cargo +nightly fuzz run --target "$HOST" "$t" -- $(libfuzzer_args "$t") \
           -max_total_time=$(( minutes * 60 )) "${workers[@]+"${workers[@]}"}" >"fuzz/fuzz-$t.log" 2>&1) &
         pids+=($!)
       done
@@ -81,12 +84,12 @@ case "$cmd" in
     ;;
   repro)
     t="${1:?repro <target> <file>}"; f="${2:?repro <target> <file>}"
-    (cd "$ROOT/crates/$(crate_of "$t")" && cargo +nightly fuzz run "$t" "$(cd "$(dirname "$f")" && pwd)/$(basename "$f")")
+    (cd "$ROOT/crates/$(crate_of "$t")" && cargo +nightly fuzz run --target "$HOST" "$t" "$(cd "$(dirname "$f")" && pwd)/$(basename "$f")")
     ;;
   min)
     for t in "${TARGETS[@]}"; do
       # shellcheck disable=SC2046
-      (cd "$ROOT/crates/$(crate_of "$t")" && cargo +nightly fuzz cmin "$t" -- $(libfuzzer_args "$t")) || exit 1
+      (cd "$ROOT/crates/$(crate_of "$t")" && cargo +nightly fuzz cmin --target "$HOST" "$t" -- $(libfuzzer_args "$t")) || exit 1
     done
     du -sh "$ROOT"/crates/wormhole-*/fuzz/corpus/* >&2
     ;;
