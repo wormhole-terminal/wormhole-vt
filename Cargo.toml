@@ -1,0 +1,42 @@
+[workspace]
+members = ["crates/wormhole-vt", "crates/wormhole-vt-bench"]
+resolver = "3"
+
+[workspace.package]
+# The bench crate's; the engine has its own version in crates/wormhole-vt/Cargo.toml.
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/wormhole-terminal/wormhole-vt"
+publish = false
+
+[workspace.dependencies]
+wormhole-vt = { path = "crates/wormhole-vt" }
+serde_json = "1.0.151"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+print_stdout = "warn"
+
+# The tests replay every conformance case and corpus many times (the bisimulation): an unoptimized
+# build makes them several times slower.
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+lto = "thin"
+
+# Release, with the symbols a profiler needs (function names and source lines): the code is the
+# same as the release build's. `scripts/profile-vt.sh` builds the engine's profiling example with it.
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
+strip = false

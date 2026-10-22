@@ -2,7 +2,7 @@
 name = "vt-compare"
 version = "0.1.0"
 edition = "2024"
-license = "GPL-3.0-or-later"
+license = "MIT"
 publish = false
 description = "Wormhole's terminal engine tooling pointed at other engines: Ghostty, WezTerm, vt100 and alacritty, in a conformance matrix and a throughput table, plus the differential tests against alacritty"
 build = "build.rs"

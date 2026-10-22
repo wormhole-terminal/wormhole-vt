@@ -1,0 +1,11 @@
+target/
+# Extra target dirs, e.g. a second build that shouldn't wait for the first's lock
+/target-*/
+.DS_Store
+
+# Claude Code: agent worktrees and personal settings
+.claude/worktrees/
+.claude/settings.local.json
+
+# JetBrains IDE settings
+.idea/
