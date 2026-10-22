@@ -1,9 +1,8 @@
 name: Engine
 
-# The terminal engine's slow checks, on Linux (the engine is plain Rust with no platform code, and
-# Linux minutes are free for a public repository):
-# - the outside conformance suites (esctest2, ucs-detect, vttest; scripts/suites-gate.sh), when the
-#   engine, its bench crate, the terminal layer or the suites' files change, and by hand;
+# The engine's slow checks, on Linux (the engine is plain Rust with no platform code); the quick ones
+# are in ci.yml:
+# - the outside conformance suites (esctest2, ucs-detect, vttest; scripts/suites-gate.sh);
 # - the public API's listing (scripts/vt-api.sh: crates/wormhole-vt/api.txt), which needs a nightly;
 # - mutation testing (cargo-mutants; scripts/mutants.sh) of the lines a change touches, with the
 #   suites: minutes, and each missed mutant is a warning on its line;
@@ -14,27 +13,9 @@ name: Engine
 on:
   push:
     branches: [main]
-    paths:
-      - crates/wormhole-vt/**
-      - crates/wormhole-vt-bench/**
-      - crates/wormhole-term/**
-      - scripts/suites-gate.sh
-      - scripts/vttest-gate.sh
-      - scripts/mutants.sh
-      - scripts/vt-api.sh
-      - tools/vt-compare/**
-      - .github/workflows/engine.yml
+    paths-ignore: ["**.md"]
   pull_request:
-    paths:
-      - crates/wormhole-vt/**
-      - crates/wormhole-vt-bench/**
-      - crates/wormhole-term/**
-      - scripts/suites-gate.sh
-      - scripts/vttest-gate.sh
-      - scripts/mutants.sh
-      - scripts/vt-api.sh
-      - tools/vt-compare/**
-      - .github/workflows/engine.yml
+    paths-ignore: ["**.md"]
   workflow_dispatch:
     inputs:
       mutants:
@@ -134,6 +115,8 @@ jobs:
           # A pull request is checked out as its merge into the base, so the base is the change's start.
           BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: |
+          # A branch's first push has no commit before it: nothing to compare with.
+          if ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then exit 0; fi
           git diff "$BASE" HEAD -- crates/wormhole-vt/src > "$RUNNER_TEMP/change.diff"
           if [ -s "$RUNNER_TEMP/change.diff" ]; then echo "any=true" >> "$GITHUB_OUTPUT"; fi
       - name: Rust (the version in rust-toolchain.toml)

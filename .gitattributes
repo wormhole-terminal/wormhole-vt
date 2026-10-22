@@ -1,0 +1,4 @@
+# The conformance cases, corpora and expected screens are compared byte for byte, and recorded
+# output has CRLF in it on purpose: no line-ending conversion on any platform (Git for Windows
+# would otherwise turn LF into CRLF on checkout).
+* -text

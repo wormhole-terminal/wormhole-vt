@@ -1,0 +1,145 @@
+name: CI
+
+# The checks every change gets: formatting, lints, the tests on Linux, macOS and Windows, the oldest
+# supported Rust (rust-version), the documentation, the package as crates.io would get it, a minute
+# of fuzzing per target, and the dependencies' licences and advisories. The slow checks (the outside
+# suites, the public API's listing, mutation testing) are in engine.yml.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Line tables are enough for backtraces, and keep the cached target dirs small.
+  CARGO_PROFILE_DEV_DEBUG: line-tables-only
+
+# The Rust version, its components and profile are rust-toolchain.toml's: `rustup toolchain install`
+# installs exactly that.
+jobs:
+  fmt:
+    name: Format
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust (the version in rust-toolchain.toml)
+        run: rustup toolchain install
+      - run: cargo fmt --all --check
+      - run: cargo fmt --check --manifest-path tools/vt-compare/Cargo.toml
+      - run: cargo fmt --check --manifest-path crates/wormhole-vt/fuzz/Cargo.toml
+
+  clippy:
+    name: Clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust (the version in rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: clippy
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: Tests (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust (the version in rust-toolchain.toml)
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: test
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        with:
+          tool: nextest
+      # nextest runs every test in its own process and bounds the slow ones (.config/nextest.toml);
+      # it does not run doctests, so they get a step of their own.
+      - run: cargo nextest run --workspace --locked --profile ci
+      - run: cargo test --doc --workspace --locked
+
+  msrv:
+    name: Rust 1.88 (rust-version)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust 1.88
+        run: rustup toolchain install 1.88 --profile minimal
+      # The library alone: its tests and tools may use newer Rust and newer dev-dependencies.
+      - run: cargo +1.88 check -p wormhole-vt --locked
+
+  docs:
+    name: Documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust (the version in rust-toolchain.toml)
+        run: rustup toolchain install
+      - run: cargo doc -p wormhole-vt --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  package:
+    name: Package
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust (the version in rust-toolchain.toml)
+        run: rustup toolchain install
+      # Builds the crate from the files crates.io would get (the `exclude` list in its Cargo.toml).
+      - run: cargo package -p wormhole-vt --locked
+      - run: cargo package -p wormhole-vt --list
+
+  fuzz:
+    name: Fuzz (a minute per target)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Rust, and a nightly for the sanitizers
+        run: |
+          rustup toolchain install
+          rustup toolchain install nightly --profile minimal
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: fuzz
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe # v2.87.27
+        with:
+          tool: cargo-fuzz
+      - run: scripts/fuzz.sh run -m 1 -j 4
+      # A crash is saved with the input that caused it: keep it to reproduce (scripts/fuzz.sh repro).
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ failure() }}
+        with:
+          name: fuzz-artifacts
+          path: crates/wormhole-vt/fuzz/artifacts
+          retention-days: 30
+
+  deny:
+    name: Licences & advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
