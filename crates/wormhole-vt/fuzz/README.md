@@ -1,8 +1,8 @@
 # Fuzzing wormhole-vt
 
 Coverage-guided fuzzing with `cargo fuzz` (libFuzzer, address sanitizer, overflow checks on). It needs
-a nightly toolchain and is run by hand: it is not part of `scripts/check.sh` or CI, and the crate is
-its own workspace so that `cargo check --workspace` never sees it.
+a nightly toolchain. CI runs each target for a minute on every change; longer runs are by hand. The
+crate is its own workspace so that `cargo check --workspace` never sees it.
 
 ```sh
 rustup toolchain install nightly --profile minimal   # once

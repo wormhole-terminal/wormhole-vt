@@ -7,8 +7,8 @@ publish = false
 description = "Wormhole's terminal engine tooling pointed at other engines: Ghostty, WezTerm, vt100 and alacritty, in a conformance matrix and a throughput table, plus the differential tests against alacritty"
 build = "build.rs"
 
-# Its own workspace, like tools/bench: kept out of the app's Cargo.lock, lints and dependency
-# audit (scripts/check.sh skips it). It depends on crates/wormhole-vt-bench by path.
+# Its own workspace: its dependencies (other engines, several dozen crates) stay out of the
+# repository's Cargo.lock, lints and dependency audit. It depends on crates/wormhole-vt-bench by path.
 [workspace]
 
 [lib]

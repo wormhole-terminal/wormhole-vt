@@ -17,3 +17,6 @@ inside it until it moved here with its history.
   profiling.
 
 **Status: beta.** Version 0.1; until 1.0 the API may change between minor versions.
+
+Contributions are welcome: see [CONTRIBUTING.md](CONTRIBUTING.md). Security reports go through
+[SECURITY.md](crates/wormhole-vt/SECURITY.md).

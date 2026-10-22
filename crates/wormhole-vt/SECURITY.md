@@ -9,9 +9,8 @@ The threat model, what the engine guarantees and what the embedding application 
 ## Reporting a vulnerability
 
 Please report privately through GitHub: **Security → Report a vulnerability** on
-[wormhole-terminal/wormhole](https://github.com/wormhole-terminal/wormhole/security/advisories/new). The
-engine lives in that repository, in `crates/wormhole-vt`, and shares its advisories. Start the title with
-`wormhole-vt:`. Don't open a public issue for it.
+[wormhole-terminal/wormhole-vt](https://github.com/wormhole-terminal/wormhole-vt/security/advisories/new).
+Don't open a public issue for it.
 
 Include the bytes that cause it (a hex dump or a file is best), the host calls around them if any, what
 the attacker gains, and the version or commit.

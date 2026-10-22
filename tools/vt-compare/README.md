@@ -43,14 +43,13 @@ check is `unmeasurable` for it and left out of its count, and the table says how
 every measurable app ran.
 
 End to end, in the real apps (Ghostty, kitty, WezTerm, iTerm2, Terminal.app, Alacritty, Wormhole):
-`scripts/terminal-compare.sh`. kitty, iTerm2 and Terminal.app have no engine one can embed, so they
+`scripts/terminal-compare.sh` in [Wormhole's repository](https://github.com/wormhole-terminal/wormhole). kitty, iTerm2 and Terminal.app have no engine one can embed, so they
 are only in that one.
 
-It is its own Cargo workspace, like `tools/bench`: its dependencies (WezTerm's model alone is
-several dozen crates) stay out of the app's `Cargo.lock`, lints and `cargo deny`, and
-`scripts/check.sh` skips it. It depends on `wormhole-vt-bench` by path, so an engine registered
-there (Wormhole's own) is in the matrix and the table without a change here. alacritty_terminal is
-here and nowhere else: the app ran on it until its own engine replaced it. Checks: `cargo fmt`,
+It is its own Cargo workspace: its dependencies (WezTerm's model alone is several dozen crates) stay
+out of the repository's `Cargo.lock`, lints and `cargo deny`. It depends on `wormhole-vt-bench` by
+path, so an engine registered there (Wormhole's own) is in the matrix and the table without a change
+here. alacritty_terminal is here and nowhere else: Wormhole ran on it until its own engine replaced it. Checks: `cargo fmt`,
 `cargo clippy --all-targets -- -D warnings` and `cargo test`, all in this folder.
 
 ## vttest
@@ -76,7 +75,7 @@ start, the cursor with the style a program chose, and the path of choices that l
 own, `--trace` prints the whole conversation, `--timing` says how long each part took. The non-VT100 menu is walked in parts, each
 in a vttest of its own, a few at once, so a whole run takes about ten seconds.
 
-`scripts/vttest-gate.sh` (run by `scripts/suites-gate.sh` and so by `scripts/check.sh` where the other suites run) walks
+`scripts/vttest-gate.sh` (run by `scripts/suites-gate.sh`, and so by CI) walks
 vttest again and fails when a screen differs from its committed one, printing the diff (a difference is walked a second time
 before it counts, so a machine too busy to answer vttest in time does not fail it). `--update` rewrites the screens after a
 change on purpose; update each menu's `review.md` with it.
@@ -196,7 +195,8 @@ one; for Ghostty it is the allocator libghostty-vt is given (it also maps page m
 which no allocator sees, so its figure is calls, not memory). Numbers from one machine and one run
 are a guide, not a verdict. The run kept in `results/` (the matrix as markdown, the throughput tables
 and their JSON) was made on a machine with other work going on, a load average of 8 against 18
-cores; the end-to-end results are in `tools/bench/results/`.
+cores; the end-to-end results (the apps) are in Wormhole's repository, in
+[`tools/bench/results/`](https://github.com/wormhole-terminal/wormhole/tree/main/tools/bench/results).
 
 ## Adding an engine
 
@@ -220,9 +220,8 @@ theme's colors, which the host plays as xterm's own, and in windows being real.
 test by test with `expected/esctest.tsv` and `expected/ucs.tsv` by `gate.py`: every test that passes in
 the expectation must still pass, and the ones that regressed are named. A known failure that starts to
 pass is reported and the expectation is left for a person to update (`scripts/suites-gate.sh --update`,
-review the diff, commit it; do the same after moving a pin in `suites.pin`). `scripts/check.sh` runs it
-last when `crates/wormhole-vt`, `crates/wormhole-vt-bench` or core's `terminal/` changed, and with
-`--all`. It takes about a minute (esctest2 is most of it; ucs-detect needs two seconds; both run at
+review the diff, commit it; do the same after moving a pin in `suites.pin`). CI runs it on every
+change (`.github/workflows/engine.yml`). It takes about a minute (esctest2 is most of it; ucs-detect needs two seconds; both run at
 once). Without the cache and without a network (cloud sessions) it skips itself with a warning.
 Today: esctest2 544 of 567 (the 23 known failures are the Xcms colour forms of OSC 4, 5 and 10 to 19
 and DA's printer port), ucs-detect 15,012 of 15,012 in 93 rows.

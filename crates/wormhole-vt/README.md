@@ -215,16 +215,16 @@ for how to report a vulnerability.
 
 MIT. See `LICENSE`.
 
-[repo]: https://github.com/wormhole-terminal/wormhole
-[changelog]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/CHANGELOG.md
-[reporting]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/SECURITY.md
-[compare]: https://github.com/wormhole-terminal/wormhole/blob/main/tools/vt-compare/README.md
-[results]: https://github.com/wormhole-terminal/wormhole/tree/main/tools/vt-compare/results/2026-10-15-Mac17-8-Apple-M5-Pro
-[concepts]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/concepts.md
-[embedding]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/embedding.md
-[rendering]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/rendering.md
-[input]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/input.md
-[passthrough]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/passthrough.md
-[security]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/security.md
-[conformance]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/conformance.md
-[tools]: https://github.com/wormhole-terminal/wormhole/blob/main/crates/wormhole-vt/docs/tools.md
+[repo]: https://github.com/wormhole-terminal/wormhole-vt
+[changelog]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/CHANGELOG.md
+[reporting]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/SECURITY.md
+[compare]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/tools/vt-compare/README.md
+[results]: https://github.com/wormhole-terminal/wormhole-vt/tree/main/tools/vt-compare/results/2026-10-15-Mac17-8-Apple-M5-Pro
+[concepts]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/concepts.md
+[embedding]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/embedding.md
+[rendering]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/rendering.md
+[input]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/input.md
+[passthrough]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/passthrough.md
+[security]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/security.md
+[conformance]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/conformance.md
+[tools]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/docs/tools.md
