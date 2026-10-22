@@ -28,5 +28,5 @@ modes: default
 23|
 24|
 --- attributes (columns from 1)
-02| 6-37 inverse
-03| 6-37 inverse
+02| 6-41 inverse
+03| 6-41 inverse
