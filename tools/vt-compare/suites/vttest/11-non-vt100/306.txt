@@ -4,8 +4,8 @@ size: 80x24  cursor: row 20 col 14
 modes: default
 --- text
 01|Both testcases should all get the same response
-02|  ok  W o r m h o l e <32> 1 . 1 . 0
-03|  ok  W o r m h o l e <32> 1 . 1 . 0
+02|  ok  w o r m h o l e - v t <32> t e s t
+03|  ok  w o r m h o l e - v t <32> t e s t
 04|
 05|
 06|

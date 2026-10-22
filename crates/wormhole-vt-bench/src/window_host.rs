@@ -86,7 +86,9 @@ impl Host {
         let term = Terminal::builder()
             .size(cols, rows)
             .scrollback(1000)
-            .identity("Wormhole", env!("CARGO_PKG_VERSION"))
+            // A fixed identity: vttest's screens show the XTVERSION reply, and a release must not
+            // change them.
+            .identity("wormhole-vt", "test")
             .cell_size(CELL.0 as u16, CELL.1 as u16)
             .palette(&theme())
             .policy(policy)

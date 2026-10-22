@@ -115,7 +115,7 @@ in the colour menu, so the same test comes up more than once.
 | 300 | protected areas as ISO 6429 guards (SPA, EPA) | unsupported: SPA/EPA | vttest says "may"; no box (DEC terminals do not implement ERM either) |
 | 301 | repeat (REP) | pass | a diagonal of 2 `+`: the second `CSI 10 b` right after a REP is ignored ("since a control sequence precedes"): a control function forgets the character REP repeats, REP included |
 | 302 to 305 | scroll down, left, right, up (SD, SL, SR, SU) | pass | a row (SD, SU) or a column (SL, SR) of `*` where vttest says |
-| 306 | report version (XTVERSION) | pass | both forms answer `Wormhole 1.1.0` |
+| 306 | report version (XTVERSION) | pass | both forms answer `wormhole-vt test`, the headless host's fixed identity |
 | 307 to 310 | xterm's DECRPM list | pass | states match; xterm-only modes the engine has not (tek4014 38, toolbar 10, logging 46, fast scroll 1014, `XT_ALTS_OK` 1046, rxvt 2001 to 2006 but 2004) say `unknown` |
 | 311 to 313 | DECRQSS for xterm's key modifier options modifyKeyboard, modifyCursorKeys, modifyFunctionKeys (`> Pm m`) | unsupported: these resources (answered invalid) | the engine keeps only modifyOtherKeys (the others change how the host writes cursor and function keys, which its encoder has no switch for) |
 | 314 | DECRQSS for modifyOtherKeys | pass | `DCS 1 $ r > 4 ; 0 m ST`: the sequence XTMODKEYS would send to set the level (0 here), as xterm's replies "look like a set-mode" |
