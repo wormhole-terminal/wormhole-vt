@@ -145,7 +145,10 @@ impl Run {
                 Event::ImageData(upload) => answers.push(upload.image),
                 Event::ImageFree(handle) => self.handles.retain(|&h| h != handle),
                 Event::HistoryDropped(batch) => {
-                    assert!(batch.lines.iter().all(|line| !line.cells.is_empty()), "an archived row has cells");
+                    assert!(
+                        batch.lines.iter().all(|line| !line.cells.is_empty()),
+                        "an archived row has cells"
+                    );
                     assert!(!batch.lines.is_empty() || batch.skipped > 0, "an empty batch");
                     self.archived.0 += batch.lines.len();
                     self.archived.1 += batch.skipped;
