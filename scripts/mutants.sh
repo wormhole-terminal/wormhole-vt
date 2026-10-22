@@ -12,6 +12,7 @@
 #   scripts/mutants.sh --area osc --iterate      # any other argument goes to cargo-mutants (see its --help)
 #   scripts/mutants.sh --in-diff change.diff     # only the mutants in the lines a diff touches
 #   scripts/mutants.sh --mem-cap 1536            # each test process may use 1.5 GB (Linux; CI sets it)
+#   scripts/mutants.sh --shard 3/32 --sharding round-robin   # every 32nd mutant, from the 3rd (CI splits a full run so)
 #
 # Areas: parser unicode grid dispatch text screen osc reports graphics repaint input passthrough rest
 # (rest = everything else: types/, terminal/*.rs, terminal/modes, terminal/event ...). No --area runs
@@ -53,7 +54,7 @@ while [ $# -gt 0 ]; do
     --list) list=1 ;;
     --mem-cap) mem_cap="${2:?--mem-cap needs megabytes}"; shift ;;
     --in-diff) extra+=(--in-diff "${2:?--in-diff needs a diff file}"); shift ;;
-    -h|--help) sed -n '2,39p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,40p' "$0"; exit 0 ;;
     *) extra+=("$1") ;;
   esac
   shift
@@ -113,10 +114,14 @@ run_one() {
       ${args[@]+"${args[@]}"} ${extra[@]+"${extra[@]}"} | wc -l | tr -d ' '
     return
   fi
+  # cargo-mutants hands what follows -- to `cargo nextest run`. The `mutants` profile
+  # (.config/nextest.toml) stops at the first failing test: the default profile runs all of them,
+  # and a mutant is caught by the first one.
+  tests=(-- --profile mutants)
   if [ "$bisim" = 0 ] && [ "$name" != repaint ]; then
-    # A nextest filter (cargo-mutants hands what follows -- to `cargo nextest run`).
+    # A nextest filter.
     local skip='test(every_vtt_case_at_every_byte) | test(every_corpus_at_many_cuts)'
-    tests=(-- -E "not ($skip | test(every_corpus_to_the_end_of_the_stream))")
+    tests+=(-E "not ($skip | test(every_corpus_to_the_end_of_the_stream))")
   fi
   mkdir -p "$dir/tmp"
   log "mutants: $name ($jobs jobs) -> $dir/mutants.out"

@@ -20,6 +20,34 @@ package, a minute of fuzzing per target, and in `engine.yml` the outside suites 
 ucs-detect, vttest), the public API's listing and mutation testing on the lines a change touches. The
 scripts in `scripts/` run each of those locally; each says how at its top.
 
+## Answering a missed mutant
+
+[cargo-mutants](https://mutants.rs) changes the engine one place at a time (an operator, a return
+value, a branch) and runs the tests. A mutant that no test fails on is "missed": that code's behaviour
+is not pinned down. `engine.yml` runs it on the lines a change touches (`scripts/mutants.sh --in-diff`)
+and **fails the check** when one is missed, with an error on its line. Locally:
+
+```sh
+git diff origin/main -- crates/wormhole-vt/src > /tmp/change.diff
+scripts/mutants.sh --in-diff /tmp/change.diff     # missed mutants: target/mutants/*/mutants.out/missed.txt
+```
+
+Answer each missed mutant in one of two ways:
+
+1. **Kill it with a test.** Write the test that fails when the code is changed like that (the mutant's
+   description, `replace < with <= in Grid::scroll_up`, says what to pin down), in a conformance case
+   (`.vtt`) or next to the code. Run `scripts/mutants.sh --in-diff` again: it is caught now.
+2. **List it as equivalent in `crates/wormhole-vt/mutants.toml`**, only when the change cannot be seen
+   from outside (a capacity hint, two paths that give the same result). Add a regex to `exclude_re`
+   with a comment that says why. Use the function's name when every mutant of that kind in it is
+   equivalent, and the line and column (`file\\.rs:90:39: replace \\| with \\^`) when others in the
+   function are not: those drift, so a line that comes back after an edit is looked at again. "Hard to
+   test" is not a reason; that is a test still to write.
+
+A full run (Actions → Engine → Run workflow, "mutants" on; about 10,700 mutants in 32 shards, hours)
+measures all of the engine, adds the shards up and fails while any mutant is missed or unmeasured;
+`mutants-missed` is the list.
+
 ## How the code is kept
 
 - **Written from the specifications.** The engine's code (`crates/wormhole-vt`) is written from the
