@@ -18,6 +18,9 @@ slow-timeout = { period = "60s", terminate-after = 4 }
 
 # Mutation runs (scripts/mutants.sh): the first failing test decides that a mutant is caught, so the
 # rest of the suite need not run (the default profile runs it all, to show every broken test).
+# `fail-fast = { max-fail = 1, terminate = "immediate" }` would also kill the tests still running at
+# the first failure, but `terminate` needs nextest 0.9.111 and the install is not pinned (nor is a
+# developer's), so the plain form stays: running tests finish, nothing new starts.
 [profile.mutants]
 fail-fast = true
 

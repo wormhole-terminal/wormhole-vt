@@ -3,7 +3,8 @@
 # value or branch of crates/wormhole-vt at a time and run the tests; a mutant no test fails ("missed")
 # is code whose behaviour nothing pins down.
 #
-#   scripts/mutants.sh --list                    # how many mutants each area has
+#   scripts/mutants.sh --list                    # the count of each of the two calls below, "engine" and "repaint"
+#                                                # (with --area, that area's count)
 #   scripts/mutants.sh --area parser             # one area (names below)
 #   scripts/mutants.sh --area grid --jobs 6      # more or fewer parallel builds (default: half the cores)
 #   scripts/mutants.sh --area repaint            # also runs the bisimulation tests (see below)
@@ -12,7 +13,7 @@
 #   scripts/mutants.sh --area osc --iterate      # any other argument goes to cargo-mutants (see its --help)
 #   scripts/mutants.sh --in-diff change.diff     # only the mutants in the lines a diff touches
 #   scripts/mutants.sh --mem-cap 1536            # each test process may use 1.5 GB (Linux; CI sets it)
-#   scripts/mutants.sh --shard 3/32 --sharding round-robin   # every 32nd mutant, from the 3rd (CI splits a full run so)
+#   scripts/mutants.sh --shard 3/32 --sharding round-robin   # every 32nd mutant, from the 4th (shards count from 0) (CI splits a full run so)
 #
 # Areas: parser unicode grid dispatch text screen osc reports graphics repaint input passthrough rest
 # (rest = everything else: types/, terminal/*.rs, terminal/modes, terminal/event ...). No --area runs
@@ -145,8 +146,6 @@ if [ -n "$area" ]; then
   run_one "$area"
 elif [ ${#files[@]} -gt 0 ]; then
   run_one all
-elif [ "$list" = 1 ]; then
-  for a in "${ALL_AREAS[@]}"; do run_one "$a"; done
 else
   run_one engine
   run_one repaint

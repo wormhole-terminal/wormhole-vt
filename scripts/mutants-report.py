@@ -31,12 +31,20 @@ def out_dirs(root):
     artifact's upload dropped the folder's own name. Not inside one, nor in a scratch copy of the tree."""
     found = []
     for path, dirs, files in os.walk(root):
-        if "missed.txt" in files:
+        # cargo-mutants renames an earlier run's folder to mutants.out.old: not this run's result.
+        if path.endswith(".old"):
+            dirs[:] = []
+        elif "missed.txt" in files:
             found.append(path)
             dirs[:] = []
         else:
-            dirs[:] = [d for d in dirs if d != "tmp"]
+            dirs[:] = [d for d in dirs if d != "tmp" and not d.endswith(".old")]
     return sorted(found)
+
+
+def escape(text):
+    """A workflow command's message: % and line breaks would end or garble it."""
+    return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
 def read_list(folder, kind):
@@ -58,11 +66,13 @@ def main():
     on_github = bool(os.environ.get("GITHUB_ACTIONS"))
 
     folders = out_dirs(args.root)
-    # A mutant is in one shard only; a set also makes a folder that was copied twice harmless.
-    lists = {k: set() for k in KINDS}
+    # A mutant is in one shard only. Lines are counted, not set members: two mutants can print the
+    # same description (same file, line and text), and a set would report a false shortfall. A folder
+    # that was copied twice would count twice; the artifacts' layout does not do that.
+    lists = {k: [] for k in KINDS}
     for folder in folders:
         for k in KINDS:
-            lists[k].update(read_list(folder, k))
+            lists[k].extend(read_list(folder, k))
     missed = sorted(lists["missed"])
     measured = sum(len(v) for v in lists.values())
 
@@ -89,7 +99,8 @@ def main():
             # "path:line:column: replace … with …"
             parts = line.split(":", 3)
             if len(parts) == 4 and parts[1].isdigit():
-                print(f"::error file={parts[0]},line={parts[1]}::No test notices this change:{parts[3]}")
+                print(f"::error file={escape(parts[0])},line={parts[1]}::"
+                      f"{escape('No test notices this change:' + parts[3])}")
     for p in problems + ([HELP] if missed else []):
         print(f"::error::{p}" if on_github else f"error: {p}")
 
