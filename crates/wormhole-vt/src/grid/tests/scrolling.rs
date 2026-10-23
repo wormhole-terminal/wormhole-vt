@@ -430,6 +430,30 @@ fn moved(lines: &[String], top: usize, bottom: usize, n: usize, up: bool) -> Vec
     out
 }
 
+/// The cell-buffer slot of every row, page by page.
+fn slots(grid: &Grid) -> Vec<Vec<u16>> {
+    grid.pages.iter().map(|page| page.rows.iter().map(|row| row.slot).collect()).collect()
+}
+
+#[test]
+fn a_region_over_several_pages_rotates_the_rows_inside_each_page() {
+    // Only the rows that cross a page boundary are copied: inside a page the records rotate and
+    // their cells stay where they are, which is the whole point of not scrolling by copy.
+    let mut g = Grid::with_page_rows(10, 6, 0, 3);
+    numbered(&mut g, 6);
+    let region = Region { top: 1, bottom: 5, left: 0, right: 9 };
+    let before = slots(&g);
+    g.scroll_up(region, 1, BG);
+    let after = slots(&g);
+    assert_eq!(screen(&g), ["line0", "line2", "line3", "line4", "line5", ""]);
+    assert_eq!(after[0], [before[0][0], before[0][2], before[0][1]], "rows 1..3 of the first page");
+    assert_eq!(after[1], [before[1][1], before[1][2], before[1][0]], "the second page");
+    g.scroll_down(region, 1, BG);
+    assert_eq!(screen(&g), ["line0", "", "line2", "line3", "line4", "line5"]);
+    assert_eq!(slots(&g)[1], before[1], "rotated back");
+    ok(&g);
+}
+
 #[test]
 fn a_region_scrolls_the_same_whatever_pages_it_spans() {
     let rows = 8;

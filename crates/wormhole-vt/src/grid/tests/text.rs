@@ -306,6 +306,19 @@ fn a_window_is_whole_lines_and_says_where_the_next_starts() {
 }
 
 #[test]
+fn a_window_stops_once_its_text_reaches_the_byte_cap() {
+    // Three lines of four bytes: with a cap of eight, the second line fills it and the third waits.
+    let sim = sim(10, 8, "abcd\nefgh\nijkl");
+    let mut out = TextCopy::new();
+    let next = sim.grid.copy_window(Line(0), 100, 8, &mut out);
+    assert_eq!(lines(&out), ["abcd", "efgh"], "a window of exactly the cap is full");
+    assert_eq!(next, Some(Line(2)));
+    let next = sim.grid.copy_window(Line(0), 100, 9, &mut out);
+    assert_eq!(lines(&out), ["abcd", "efgh", "ijkl"], "one byte of room takes the next line");
+    assert_eq!(next, Some(Line(3)));
+}
+
+#[test]
 fn a_window_does_not_cut_a_wrapped_line() {
     let sim = sim(5, 8, "abcdefghijkl\nxy");
     let (first, next) = copy(&sim, 0, 1);

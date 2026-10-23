@@ -200,6 +200,18 @@ impl Grid {
     /// Everything is read under one borrow of the grid and takes time in proportion to `rows`,
     /// so a host that must not hold its lock long asks for a few hundred rows at a time.
     pub fn copy_text(&self, from: Line, rows: usize, out: &mut TextCopy) -> Option<Line> {
+        self.copy_window(from, rows, MAX_WINDOW_BYTES, out)
+    }
+
+    /// [`Grid::copy_text`] with the text cap as an argument, so a test can reach it without a
+    /// grid of a quarter gigabyte.
+    pub(super) fn copy_window(
+        &self,
+        from: Line,
+        rows: usize,
+        max_bytes: usize,
+        out: &mut TextCopy,
+    ) -> Option<Line> {
         out.clear();
         out.cols = self.cols;
         out.history = self.history_len();
@@ -208,7 +220,7 @@ impl Grid {
         let limit = rows.saturating_mul(WINDOW_SLACK);
         let mut y = from.0.max(top);
         let mut copied = 0usize;
-        while y <= bottom && copied < rows && out.text.len() < MAX_WINDOW_BYTES {
+        while y <= bottom && copied < rows && out.text.len() < max_bytes {
             let mut line =
                 Building { start: out.text.len(), table_from: out.table.len(), plain: true, base: 0 };
             let first = y;
@@ -232,7 +244,7 @@ impl Grid {
                 copied += 1;
                 y += 1;
                 line.base += self.cols;
-                if !wrapped || y > bottom || copied >= limit || out.text.len() >= MAX_WINDOW_BYTES {
+                if !wrapped || y > bottom || copied >= limit || out.text.len() >= max_bytes {
                     break;
                 }
             }
