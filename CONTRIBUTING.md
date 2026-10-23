@@ -43,6 +43,9 @@ Answer each missed mutant in one of two ways:
    equivalent, and the line and column (`file\\.rs:90:39: replace \\| with \\^`) when others in the
    function are not: those drift, so a line that comes back after an edit is looked at again. "Hard to
    test" is not a reason; that is a test still to write.
+   A `delete field … from struct … expression` mutant cannot be listed: cargo-mutants ignores
+   `exclude_re` for it, so answer it in code (leave out the field when it is the default, or set it by
+   assignment after the literal).
 
 A full run (Actions → Engine → Run workflow, "mutants" on; about 10,700 mutants in 32 shards, hours)
 measures all of the engine, adds the shards up and fails while any mutant is missed or unmeasured;

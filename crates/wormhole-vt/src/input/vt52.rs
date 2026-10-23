@@ -42,12 +42,7 @@ pub(super) fn encode(ev: &KeyEvent, modes: &InputModes, out: &mut Vec<u8>) -> bo
         // (Shift+Tab is a plain tab) and without modifyOtherKeys.
         _ => {
             // The VT52 has no new line mode: Return is CR.
-            let plain = InputModes {
-                vt52: false,
-                modify_other_keys: ModifyOtherKeys::Off,
-                new_line: false,
-                ..*modes
-            };
+            let plain = InputModes { modify_other_keys: ModifyOtherKeys::Off, new_line: false, ..*modes };
             let shifted_tab = ev.key == Key::Tab && ev.mods.contains(Mods::SHIFT);
             let ev = if shifted_tab { KeyEvent { mods: ev.mods - Mods::SHIFT, ..*ev } } else { *ev };
             legacy::encode(&ev, &plain, out)

@@ -192,7 +192,7 @@ impl Terminal {
             for cell in &view.cells()[area.left..=area.right] {
                 let style = *view.style(cell.style_id());
                 common = Some(match common {
-                    None => Style { underline_color: style.underline_color, ..style },
+                    None => style,
                     Some(so_far) => Style {
                         attrs: so_far.attrs & style.attrs,
                         fg: if so_far.fg == style.fg {
