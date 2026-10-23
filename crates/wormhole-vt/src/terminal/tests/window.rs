@@ -9,6 +9,16 @@ fn allowed() -> Rig {
     rig
 }
 
+#[test]
+fn the_policy_reads_back_as_the_host_last_set_it() {
+    let mut rig = Rig::new(20, 5);
+    assert_eq!(rig.term.policy(), Policy::default(), "everything is off until the host opens it");
+    let open = Policy { window_ops: true, screen_checksum: true, ..Policy::default() };
+    rig.term.set_policy(open);
+    assert_eq!(rig.term.policy(), open);
+    assert!(rig.term.policy().window_ops && !rig.term.policy().title_report);
+}
+
 fn ops(rig: &mut Rig) -> Vec<WindowOp> {
     rig.events()
         .into_iter()

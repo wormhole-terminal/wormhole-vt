@@ -322,3 +322,34 @@ fn the_default_colors_read_back_as_set() {
     term.set_default_colors(&palette);
     assert_eq!(term.default_colors()[1], crate::types::Rgb { r: 1, g: 2, b: 3 });
 }
+
+/// What repainting `input` writes, as text.
+fn written(input: &str) -> String {
+    let mut term = Terminal::builder().size(20, 6).scrollback(100).build();
+    term.feed(input.as_bytes());
+    term.clear_replies();
+    let mut bytes = Vec::new();
+    term.repaint(&mut bytes).expect("ready");
+    String::from_utf8_lossy(&bytes).into_owned()
+}
+
+#[test]
+fn the_cursor_style_is_handed_back_only_when_the_replay_of_the_blink_took_it() {
+    // Nothing set the blink: there is nothing to hand back, and a stray DECSCUSR 0 is noise.
+    assert!(!written("abc").contains("\x1b[0 q"));
+    assert!(!written("abc\x1b[?7l").contains("\x1b[0 q"));
+    // XTSAVE of the blink while the host owns it: the replay sets it, so it is handed back.
+    let saved = written("abc\x1b[?12s");
+    assert!(saved.contains("\x1b[?12l"), "{saved:?}");
+    assert!(saved.contains("\x1b[0 q"), "{saved:?}");
+}
+
+#[test]
+fn a_saved_alternate_screen_mode_is_replayed_on_the_screen_it_reported() {
+    // XTSAVE of 47 on the alternate screen: set and saved there, then the main screen is shown again.
+    same("main\x1b[?1049h\x1b[?47salt\x1b[?1049l");
+    same("main\x1b[?1049h\x1b[?1049s\x1b[?1049l");
+    same("main\x1b[?47s\x1b[?1049halt");
+    let bytes = written("main\x1b[?1049h\x1b[?47s\x1b[?1049l");
+    assert!(bytes.contains("\x1b[?47h\x1b[?47s"), "{bytes:?}");
+}
