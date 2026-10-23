@@ -228,6 +228,17 @@ mod tests {
     }
 
     #[test]
+    fn the_public_entry_point_says_whether_it_wrote_a_report() {
+        let mut out = Vec::new();
+        let click = ev(B::Left, Press, 2, 3);
+        assert!(crate::input::encode_mouse(&click, &modes(CLICK, Sgr), &mut out));
+        assert_eq!(out, b"\x1b[<0;3;4M");
+        out.clear();
+        assert!(!crate::input::encode_mouse(&click, &modes(MouseTracking::Off, Sgr), &mut out));
+        assert!(out.is_empty());
+    }
+
+    #[test]
     fn x10_press_release() {
         let m = modes(CLICK, X10);
         assert_eq!(report(ev(B::Left, Press, 0, 0), m), Some(b"\x1b[M !!".to_vec()));

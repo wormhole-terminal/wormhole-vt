@@ -1,7 +1,7 @@
 //! What the parser does when the handler says it is in VT52 mode, or that 8-bit controls are on:
 //! the two answers the terminal changes at run time.
 
-use super::{Parser, Recorder, show};
+use super::{Csi, Handler, Parser, Recorder, show};
 
 /// What `bytes` report to a handler that answers as `recorder` is set up to.
 fn run_as(recorder: Recorder, bytes: &[u8]) -> Vec<String> {
@@ -16,6 +16,34 @@ fn vt52() -> Recorder {
 
 fn eight_bit() -> Recorder {
     Recorder { eight_bit: true, ..Recorder::default() }
+}
+
+/// A handler that leaves every mode question at its default and writes down what it hears.
+#[derive(Default)]
+struct Plain(Vec<String>);
+
+impl Handler for Plain {
+    fn print_ascii(&mut self, run: &[u8]) {
+        self.0.push(format!("ascii {}", String::from_utf8_lossy(run)));
+    }
+    fn print(&mut self, c: char) {
+        self.0.push(format!("print {c:?}"));
+    }
+    fn csi(&mut self, csi: &Csi) {
+        self.0.push(format!("csi {}", csi.final_byte() as char));
+    }
+}
+
+#[test]
+fn a_handler_that_does_not_say_otherwise_gets_no_eight_bit_controls() {
+    // 0x9B alone is not UTF-8, and only a handler that asked for C1 controls hears it as CSI.
+    let (mut parser, mut plain) = (Parser::new(), Plain::default());
+    parser.advance(&mut plain, b"\x9b1mA");
+    assert_eq!(plain.0, ["print '\u{fffd}'", "ascii 1mA"]);
+    // The same inside an ignored sequence: the byte starts no other, so the A ends the first.
+    let (mut parser, mut plain) = (Parser::new(), Plain::default());
+    parser.advance(&mut plain, b"\x1b[$1\x9bA");
+    assert!(plain.0.is_empty(), "{:?}", plain.0);
 }
 
 #[test]
