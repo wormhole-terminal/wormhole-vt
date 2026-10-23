@@ -313,10 +313,8 @@ exclude_re = [
     "replace \\| with \\^ in Terminal::soft_reset",
 
     # -- terminal/text/
-    # What a push saves and what is cleared are distinct bits; the style's underline color is the
-    # one `..style` already gives.
+    # What a push saves and what is cleared are distinct bits.
     "replace \\| with \\^ in Entry::restore",
-    "sgr_stack\\.rs:195:37: delete field underline_color from struct Style expression in Terminal::report_sgr",
     # Bold and dim are two bits.
     "sgr\\.rs:75:49: replace \\| with \\^ in Style::apply",
 
@@ -402,8 +400,6 @@ exclude_re = [
     "input/legacy\\.rs:127:38: replace \\| with \\^ in char_key",
     "input/legacy\\.rs:215:(60|72|85): replace \\| with \\^ in keypad",
     "input/other_keys\\.rs:38:38: replace \\| with \\^ in encode",
-    # The legacy encoder, which the VT52 one calls with its modes, never reads the `vt52` flag.
-    "input/vt52\\.rs:46:17: delete field vt52 from struct InputModes expression in encode",
     # The keypad's navigation keys that VT52 mode has no twin for: `keypad_character`, where the arm's
     # absence sends them, answers `false` for them as well.
     "input/vt52\\.rs:71:9: delete match arm KeypadKey::PageUp",
@@ -422,7 +418,7 @@ exclude_re = [
     "parser/scan\\.rs:36:5: replace is_control_or_del -> u64 with 1",
     "parser/scan\\.rs:37:17: replace \\* with [/+] in is_control_or_del",
     "parser/scan\\.rs:37:25: replace \\| with \\^ in is_control_or_del",
-    "parser/scan\\.rs:37:(39|44): replace & with [|\\^] in is_control_or_del",
+    "parser/scan\\.rs:37:(39: replace & with [|\\^]|44: replace & with \\|) in is_control_or_del",
     # The block test is a shortcut: a block it fails goes through the words, which are exact.
     "parser/scan\\.rs:107:57: replace < with <= in string_run",
     "parser/scan\\.rs:107:65: replace \\| with \\^ in string_run",
