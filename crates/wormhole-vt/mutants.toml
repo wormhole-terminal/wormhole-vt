@@ -323,6 +323,10 @@ exclude_re = [
     # ---- terminal/{graphics,reports,osc,text}: the second run's equivalent mutants.
 
     # -- terminal/graphics/
+    # The tick only orders the pictures, and `victim` breaks a tie by taking the earlier in the list,
+    # which is the earlier inserted: a tick that an insert does not advance (a touch still does) ranks
+    # the pictures the way the full count does.
+    "images\\.rs:107:19: replace \\+= with \\*= in ImageTable::insert",
     # Four base64 characters at a time is a shortcut past the one-by-one reading, which reads the
     # same bytes and keeps the same cap: a mutant that makes the shortcut refuse every group (the
     # mask turned into an XOR or an OR can never be zero) only takes the slow way.
@@ -370,6 +374,9 @@ exclude_re = [
     "window\\.rs:(267:47|268:53): replace - with [/+] in Terminal::set_columns_per_page",
 
     # -- terminal/osc/
+    # The length goes into the top byte of the last word, and the bytes of a remainder (at most seven)
+    # never reach it: the two places do not overlap, so OR and XOR agree.
+    "link/text\\.rs:74:43: replace \\^ with \\| in <impl Hasher for TextHasher>::write",
     # A text of exactly the limit is cut to itself.
     "payload\\.rs:5:19: replace > with >= in cut",
     # The cap of a pointer name is above every name there is (32 bytes; the longest is 18), and no
@@ -415,7 +422,7 @@ exclude_re = [
     "parser/scan\\.rs:36:5: replace is_control_or_del -> u64 with 1",
     "parser/scan\\.rs:37:17: replace \\* with [/+] in is_control_or_del",
     "parser/scan\\.rs:37:25: replace \\| with \\^ in is_control_or_del",
-    "parser/scan\\.rs:37:(39|44): replace & with \\| in is_control_or_del",
+    "parser/scan\\.rs:37:(39|44): replace & with [|\\^] in is_control_or_del",
     # The block test is a shortcut: a block it fails goes through the words, which are exact.
     "parser/scan\\.rs:107:57: replace < with <= in string_run",
     "parser/scan\\.rs:107:65: replace \\| with \\^ in string_run",
