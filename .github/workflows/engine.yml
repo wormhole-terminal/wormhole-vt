@@ -144,7 +144,7 @@ jobs:
       # test notices fails the job, with an error on its line; the message says what to do.
       - name: No mutant in the change may be missed
         if: steps.diff.outputs.any
-        run: scripts/mutants-report.py target/mutants --annotate --allow-empty
+        run: python3 scripts/mutants-report.py target/mutants --annotate --allow-empty
 
   # What a complete full run measures, so that the last job can tell a finished run from one where a
   # shard ran out of time. No build is shared with the shards: cargo-mutants builds in scratch copies
@@ -262,7 +262,7 @@ jobs:
             exit 1
           fi
           rc=0
-          scripts/mutants-report.py shards --expect "$TOTAL" --merged-out missed.txt || rc=$?
+          python3 scripts/mutants-report.py shards --expect "$TOTAL" --merged-out missed.txt || rc=$?
           # A shard that failed or was cancelled can still have uploaded part of its work (counted
           # above); the run is not complete either way.
           if [ "$SHARDS" != success ]; then
