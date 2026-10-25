@@ -213,7 +213,7 @@ for how to report a vulnerability.
 
 ## Licence
 
-MIT. See `LICENSE`.
+MIT. See `LICENSE`; the Unicode data it is generated from is under the Unicode License v3 (`NOTICE`).
 
 [repo]: https://github.com/wormhole-terminal/wormhole-vt
 [changelog]: https://github.com/wormhole-terminal/wormhole-vt/blob/main/crates/wormhole-vt/CHANGELOG.md

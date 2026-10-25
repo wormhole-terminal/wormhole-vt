@@ -20,9 +20,3 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
----
-
-The Unicode tables in src/unicode/tables.rs are generated from the Unicode
-Character Database, and tests/data/GraphemeBreakTest.txt is a Unicode data
-file. Both are (c) Unicode, Inc., under the Unicode License v3
-(https://www.unicode.org/license.txt).
