@@ -319,3 +319,23 @@ fn cells_copied_with_a_link_the_destination_has_no_room_for_come_without_it() {
     assert!(destination.cells(0).iter().all(|cell| !cell.has_hyperlink()), "no cell claims a link");
     assert_eq!(destination.links.at(destination.offset(0, 1)), None);
 }
+
+#[test]
+fn retagging_cells_marks_the_row_changed_only_when_a_cell_changed() {
+    let mut page = page(4, 1);
+    let pen = Pen { content: BlockPart::Command, block: 1, ..Pen::default() };
+    page.write_ascii(0, 0, b"ab", &pen);
+    assert!(page.take_dirty(0));
+    page.retag_content(0, 0..4, BlockPart::Output, BlockPart::Prompt);
+    assert!(!page.take_dirty(0), "no cell was part of the output");
+    page.retag_content(0, 1..4, BlockPart::Command, BlockPart::Prompt);
+    assert!(page.take_dirty(0));
+    assert_eq!(page.cells(0)[0].content(), BlockPart::Command, "before the range");
+    assert_eq!(page.cells(0)[1].content(), BlockPart::Prompt);
+    assert_eq!(page.cells(0)[2].content(), BlockPart::None, "a blank cell is no part");
+    page.retag_content(0, 3..9, BlockPart::None, BlockPart::Output);
+    assert_eq!(page.cells(0)[3].content(), BlockPart::Output, "a range past the row stops at its end");
+    let (start, end) = (3, 1);
+    page.retag_content(0, start..end, BlockPart::Output, BlockPart::Prompt);
+    assert_eq!(page.cells(0)[3].content(), BlockPart::Output, "an empty range changes nothing");
+}

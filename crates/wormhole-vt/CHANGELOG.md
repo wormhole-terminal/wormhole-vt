@@ -114,6 +114,12 @@ First public release (0.1.0).
   generated one) are stored in the value, so a link costs no allocation for its id. The text of
   addresses is shared through a bounded table, so a link that repeats costs none for its address either.
 
+### Fixed
+
+- A prompt a shell draws again without a new `OSC 133;A` (bash's readline after a resize, with the mark
+  sent by `PROMPT_COMMAND`) stays the prompt of its block: a `B` that follows the redrawn text makes it
+  prompt again, so the block keeps its start row.
+
 ### Security
 
 - Titles, icon names and folders (OSC 0, 1, 2, 7) are cleaned when they are set: C0 and C1 controls and

@@ -206,6 +206,11 @@ pub struct Terminal {
     cluster: Cluster,
     /// The number of the last command block (OSC 133); 0 before any.
     block: u32,
+    /// How many logical lines the last prompt had, from the first `B` after its `A`; 0 until then
+    /// (see `osc::marks`).
+    prompt_lines: u16,
+    /// The cells the last line of that prompt takes, wrapped rows included.
+    prompt_tail: usize,
     /// The pen's shell mark while the alternate screen shows (its cells are not part of a block).
     stashed_content: BlockPart,
     /// Hyperlinks without an id of their own get one from this count.

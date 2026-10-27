@@ -546,3 +546,10 @@ fn arguments_outside_the_screen_do_nothing_and_do_not_panic() {
     assert_eq!(g.pin_point(pin), Some(at(2, 5)));
     ok(&g);
 }
+
+#[test]
+fn retagging_a_row_off_the_screen_does_nothing() {
+    let mut grid = grid(4, 2);
+    grid.retag_content(2, 0..4, BlockPart::None, BlockPart::Prompt);
+    ok(&grid);
+}

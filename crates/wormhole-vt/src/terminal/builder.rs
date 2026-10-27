@@ -214,6 +214,8 @@ impl Builder {
                 state: crate::unicode::GraphemeState::new(),
             },
             block: 0,
+            prompt_lines: 0,
+            prompt_tail: 0,
             stashed_content: BlockPart::None,
             link_seq: 0,
             link_text: osc::link::LinkText::default(),

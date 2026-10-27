@@ -78,6 +78,8 @@ const TERMINAL: &[(&str, Coverage)] = &[
     ),
     ("cluster", Written("final_state: the cluster is printed again (Gaps::CLUSTER when it cannot be)")),
     ("block", Written("Seeds::block, and OSC 133;A marks that count up from it")),
+    ("prompt_lines", Derived("measured again at the repaint's 133;B after the block's prompt cells")),
+    ("prompt_tail", Derived("measured again at the repaint's 133;B after the block's prompt cells")),
     ("stashed_content", Written("final_state: the main screen's pen mark is set, then `?47h` puts it aside")),
     ("link_seq", Written("Seeds::link_seq")),
     ("link_text", Scratch("a cache of the text of the last links, to share it; no sequence reads it")),

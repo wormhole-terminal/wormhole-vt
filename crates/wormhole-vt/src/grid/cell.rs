@@ -321,6 +321,13 @@ impl Cell {
         Cell(self.0 & !((flags.bits() as u64) << FLAGS_SHIFT))
     }
 
+    /// The cell as part of `content` instead of what it was part of.
+    #[inline]
+    pub(super) const fn with_content(self, content: BlockPart) -> Cell {
+        let shift = CONTENT_SHIFT as u32 + FLAGS_SHIFT;
+        Cell(self.0 & !(0b11 << shift) | (content as u64) << shift)
+    }
+
     #[inline]
     pub(super) const fn with_style(self, style: StyleId) -> Cell {
         Cell(self.0 & !STYLE_BITS | (style as u64) << STYLE_SHIFT)

@@ -30,6 +30,7 @@ mod restore;
 mod scheme;
 mod selection;
 mod selection_edges;
+mod shell_marks;
 mod snapshot;
 mod stacks;
 mod tabs;

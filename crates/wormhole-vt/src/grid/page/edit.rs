@@ -6,7 +6,7 @@ use std::ops::Range;
 use crate::types::Color;
 
 use super::Page;
-use crate::grid::cell::{Cell, CellFlags, Spare, StyleRun};
+use crate::grid::cell::{BlockPart, Cell, CellFlags, Spare, StyleRun};
 use crate::grid::row::{DIRTY, WRAPPED};
 use crate::grid::style::Style;
 
@@ -68,6 +68,28 @@ impl Page {
         let cell = self.cells[at];
         if cell.codepoint() == 0 && cell.flag_set().is_empty() {
             self.cells[at] = cell.with_flags_set(CellFlags::TAB);
+        }
+    }
+
+    /// Make the cells `cols` of `row` that are part of `from` part of `to` instead, and no others. The
+    /// text, its look and the row's block stay as they are; only what the cells are part of changes.
+    pub(in crate::grid) fn retag_content(
+        &mut self,
+        row: usize,
+        cols: Range<usize>,
+        from: BlockPart,
+        to: BlockPart,
+    ) {
+        let base = self.base_of(row);
+        let mut changed = false;
+        for cell in self.cells[base..base + self.cols].iter_mut().take(cols.end).skip(cols.start) {
+            if cell.content() == from {
+                *cell = cell.with_content(to);
+                changed = true;
+            }
+        }
+        if changed {
+            self.touch(row);
         }
     }
 

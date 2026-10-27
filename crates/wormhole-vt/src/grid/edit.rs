@@ -8,7 +8,7 @@ use std::ops::Range;
 
 use crate::types::Color;
 
-use super::{Grid, Pen, Spare};
+use super::{BlockPart, Grid, Pen, Spare};
 
 impl Grid {
     /// Write printable ASCII `bytes` (0x20..=0x7E) into row `y` from column `x`, in `pen`'s style.
@@ -170,6 +170,15 @@ impl Grid {
         if y < self.rows {
             let (page, row) = self.page_row_mut(y);
             page.set_block(row, block);
+        }
+    }
+
+    /// Make the cells `cols` of live row `y` that are part of `from` part of `to` (see
+    /// [`BlockPart`]); the terminal uses it when a shell redraws its prompt.
+    pub(crate) fn retag_content(&mut self, y: usize, cols: Range<usize>, from: BlockPart, to: BlockPart) {
+        if y < self.rows {
+            let (page, row) = self.page_row_mut(y);
+            page.retag_content(row, cols, from, to);
         }
     }
 
