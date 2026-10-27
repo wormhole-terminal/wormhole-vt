@@ -192,7 +192,7 @@ fn the_rows_of_a_command_that_ran_are_not_taken_through_its_output() {
 fn a_prompt_at_the_top_of_the_screen_does_not_look_into_the_history_for_its_rows() {
     let mut rig = Rig::with_scrollback(10, 3, 10);
     // A line that wraps ends in the history, right above the screen's first row.
-    rig.feed("xxxxxxxxxxxxxxx\x1b[S\x1b[2J\x1b[H");
+    rig.feed("xxxxxxxxxxxxxxx\x1b[S\x1b[H\x1b[J");
     rig.feed(&format!("{A}$ {B}"));
     rig.feed(&format!("\r\x1b[K$ {B}"));
     assert_eq!(mark(&rig, 0), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
@@ -217,4 +217,60 @@ fn a_prompt_that_wraps_after_a_narrowing_resize_is_prompt_on_its_rows_with_readl
     assert_eq!(mark(&rig, 1), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
     assert_eq!(mark(&rig, 2), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
     assert_eq!(rig.term.block_text(Line(1), 1, BlockPart::Command), "");
+}
+
+#[test]
+fn a_prompt_whose_first_line_wraps_is_redrawn_whole_and_leaves_the_output_above_it_alone() {
+    // Two logical lines, the first on two rows; drawn again (B only) under output of a shell that
+    // sends no C. The walk takes the first line's two rows and stops at the output.
+    let mut rig = Rig::new(10, 10);
+    rig.feed(&format!("{A}0123456789abc\r\n$ {B}ls\r\nfile two\r\n0123456789abc\r\n$ {B}"));
+    assert_eq!(mark(&rig, 3), Some(RowMark { block: 1, prompt: false, command: true, output: false }));
+    for y in 4..=6 {
+        assert_eq!(mark(&rig, y), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
+    }
+}
+
+#[test]
+fn a_wrapped_prompt_line_at_the_top_of_the_screen_does_not_look_into_the_history() {
+    let mut rig = Rig::with_scrollback(10, 3, 10);
+    // A line that wraps ends in the history, right above the screen's first row.
+    rig.feed("xxxxxxxxxxxxxxx\x1b[S\x1b[H\x1b[J");
+    rig.feed(&format!("{A}one\r\n$ {B}"));
+    rig.feed(&format!("\x1b[A\r\x1b[Jone\r\n$ {B}"));
+    assert_eq!(mark(&rig, 0), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
+    assert_eq!(mark(&rig, 1), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
+}
+
+#[test]
+fn a_shorter_prompt_drawn_under_output_takes_no_row_that_does_not_wrap_into_it() {
+    // After a `cd` the prompt is shorter than the one measured, which wrapped; the shell sends no C.
+    let mut rig = Rig::new(12, 6);
+    rig.feed(&format!("{A}~/src/wormhole$ {B}cd; ls\r\nnotes.md\r\n~$ {B}"));
+    assert_eq!(mark(&rig, 2), Some(RowMark { block: 1, prompt: false, command: true, output: false }));
+    assert_eq!(mark(&rig, 3), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
+}
+
+#[test]
+fn a_prompt_drawn_right_after_output_takes_no_more_rows_of_it_than_its_last_line_had() {
+    // The measured prompt's last line wrapped onto two rows. The output (no C) ends without a
+    // newline, so the prompt goes on in its line, and that line's rows above the prompt's stay.
+    let mut rig = Rig::new(10, 10);
+    rig.feed(&format!("{A}0123456789ab$ {B}x\r\n{}0123456789ab$ {B}", "a".repeat(25)));
+    for y in 2..=3 {
+        assert_eq!(mark(&rig, y), Some(RowMark { block: 1, prompt: false, command: true, output: false }));
+    }
+    assert_eq!(mark(&rig, 5), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
+}
+
+#[test]
+fn a_prompt_that_filled_its_row_is_prompt_on_every_row_after_a_narrowing_to_two_columns() {
+    // Measured with the cursor waiting in the last column: that cell is the prompt's too.
+    let mut rig = Rig::new(10, 8);
+    rig.feed(&format!("{A}abcdefghij{B}"));
+    rig.term.resize(2, 8);
+    rig.feed(&format!("\x1b[H\x1b[Jabcdefghij{B}"));
+    for y in 0..5 {
+        assert_eq!(mark(&rig, y), Some(RowMark { block: 1, prompt: true, command: false, output: false }));
+    }
 }

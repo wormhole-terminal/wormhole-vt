@@ -47,9 +47,11 @@ exclude_re = [
     # drift: a mutant that comes back after an edit above it is checked again) when the function
     # has others of that kind that a test does catch.
 
-    # -- grid/cell.rs: a style id and a code point fill exactly the bits the mask just cleared.
+    # -- grid/cell.rs: a style id, a code point and a block part fill exactly the bits the mask just
+    # cleared.
     "replace \\| with \\^ in Cell::with_style",
     "replace \\| with \\^ in Cell::with_codepoint",
+    "replace \\| with \\^ in Cell::with_content",
     # The three fields of a word (code point, style id, flags) fill places that do not overlap, and
     # so do the two masks that make `NEEDS_RELEASE`.
     "replace \\| with \\^ in Cell::compose",
