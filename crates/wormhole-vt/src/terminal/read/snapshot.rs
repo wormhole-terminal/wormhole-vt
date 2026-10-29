@@ -133,9 +133,12 @@ impl Terminal {
         self.grid.scroll_view(scroll);
     }
 
-    /// Erase the history; the screen stays.
+    /// Erase the history; the screen stays. It counts as ED 3 for the clear screen that follows
+    /// (see the module's rules): a host's "clear buffer" that then sends ^L gets the shell's `ESC[2J`
+    /// without the screen being saved into the history it just emptied.
     pub fn clear_history(&mut self) {
         self.grid.clear_scrollback();
+        self.history_just_cleared = true;
     }
 
     /// The screen being shown, for our own tools (the fuzz targets, the benches) that look at the

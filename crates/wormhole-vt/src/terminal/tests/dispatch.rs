@@ -26,6 +26,37 @@ fn a_clear_screen_keeps_the_history_unless_the_history_was_just_cleared() {
 }
 
 #[test]
+fn clearing_the_history_from_the_host_counts_as_ed_3_for_the_clear_screen_after_it() {
+    // The host's Clear Buffer: it empties the history, then sends ^L, which zsh answers with
+    // `ESC[H ESC[2J` and a redraw (bytes captured from `zsh -f` on macOS). The screen that was
+    // meant to be cleared must not land in the history it was just asked to empty.
+    let after = |between: &str| {
+        let mut rig = Rig::new(10, 3);
+        rig.feed("one\r\ntwo\r\nthree\r\nfour");
+        assert!(rig.term.history_len() > 0);
+        rig.term.clear_history();
+        assert_eq!(rig.term.history_len(), 0);
+        rig.feed(between);
+        rig.feed("\x1b[2J");
+        rig.term.history_len()
+    };
+    assert_eq!(after(""), 0);
+    assert_eq!(after("\x1b[H"), 0);
+    assert_eq!(after("\x1b[K"), 0);
+    // As after ED 3, anything else in between means the program did something of its own.
+    assert_eq!(after("\x1b[m"), 3, "SGR");
+    assert_eq!(after("x"), 3, "text");
+    assert_eq!(after("\r"), 3, "a control");
+
+    let mut rig = Rig::new(10, 3);
+    rig.feed("one\r\ntwo\r\nthree\r\nfour");
+    rig.term.clear_history();
+    rig.feed("\x1b[H\x1b[2J\x1b[0m\x1b[27m\x1b[24m\x1b[J\x1b[K% \x1b[K");
+    assert_eq!(rig.term.history_len(), 0);
+    assert_eq!((rig.row(0), rig.row(1), rig.row(2)), ("%".into(), "".into(), "".into()));
+}
+
+#[test]
 fn scroll_down_with_more_parameters_is_xterms_mouse_tracking_and_ignored() {
     let mut rig = Rig::new(5, 3);
     rig.feed("a\r\nb\x1b[1;2;3;4;5T");

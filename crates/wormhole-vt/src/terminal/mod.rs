@@ -79,7 +79,8 @@
 //!   spans the full width, feeds the primary screen's history; any other scroll (DL, IL, SD, a
 //!   region that starts lower) does not. ED 2 moves the lines that hold something into the
 //!   history first (as ^L has always left them to scroll back to) unless ED 3 came just before
-//!   (macOS `clear`).
+//!   (macOS `clear`) or the host emptied the history itself with `clear_history` (a "clear buffer"
+//!   that then sends ^L).
 //! - Modes belong to the terminal, not to a screen (IRM set on the main screen is still set on
 //!   the alternate one); the cursor, pen, character sets, margins and tab stops are shared by
 //!   both screens, DECSC's saved state and the kitty keyboard flags are per screen (xterm).
@@ -236,8 +237,8 @@ pub struct Terminal {
     replies: reports::ReplyQueue,
     /// The lines of history asked for, see [`Builder::scrollback`].
     scrollback_lines: usize,
-    /// ED 3 ran and nothing but cursor moves and erases came since: an ED 2 now does not save
-    /// the screen into the history it was just asked to empty.
+    /// ED 3 ran, or the host called `clear_history`, and nothing but cursor moves and erases came
+    /// since: an ED 2 now does not save the screen into the history it was just asked to empty.
     history_just_cleared: bool,
     /// DECSCL's level, and whether the C1 controls are one byte (S8C1T).
     level: Level,
