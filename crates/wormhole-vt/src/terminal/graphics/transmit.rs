@@ -31,10 +31,10 @@ pub(super) enum Flow {
 }
 
 /// A transmission that passed the checks.
-struct Checked {
-    format: ImageFormat,
-    width: u32,
-    height: u32,
+pub(super) struct Checked {
+    pub format: ImageFormat,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl Terminal {
@@ -80,7 +80,7 @@ impl Terminal {
         if let Err(error) = usable {
             return self.answer(Target::of(&command).render(Err(error)));
         }
-        let transmits = matches!(command.action, Action::Transmit | Action::TransmitDisplay);
+        let transmits = matches!(command.action, Action::Transmit | Action::TransmitDisplay | Action::Frame);
         if command.more && transmits {
             self.graphics.transfer = Some(Transfer { first: command, data: payload });
         } else {
@@ -90,6 +90,9 @@ impl Terminal {
 
     /// A whole command, its payload put together.
     fn run_kitty(&mut self, command: Command, payload: Vec<u8>) {
+        // What an earlier erase or scroll orphaned is not this command's to free.
+        drop(self.grid.take_orphaned());
+        drop(self.other.take_orphaned());
         let target = Target::of(&command);
         match self.kitty_action(&command, payload) {
             Ok(Flow::Done { assigned }) => {
@@ -106,9 +109,6 @@ impl Terminal {
     }
 
     fn kitty_action(&mut self, command: &Command, payload: Vec<u8>) -> Result<Flow, Error> {
-        if command.relative {
-            return Err(Error::Unsupported("relative placements"));
-        }
         match command.action {
             Action::Transmit | Action::TransmitDisplay => self.kitty_transmit(command, payload),
             Action::Put => {
@@ -133,12 +133,14 @@ impl Terminal {
                 self.check_transmission(command, &payload)?;
                 Ok(Flow::Done { assigned: None })
             }
-            Action::Animation => Err(Error::Unsupported("animation")),
+            Action::Frame => self.kitty_frame(command, payload),
+            Action::Animate => self.kitty_animate(command),
+            Action::Compose => self.kitty_compose(command),
         }
     }
 
     /// Whether the keys and the bytes make a picture this terminal can show.
-    fn check_transmission(&self, command: &Command, data: &[u8]) -> Result<Checked, Error> {
+    pub(super) fn check_transmission(&self, command: &Command, data: &[u8]) -> Result<Checked, Error> {
         if command.medium != Medium::Direct {
             return Err(Error::Unsupported("a file or shared memory"));
         }
@@ -255,6 +257,7 @@ impl Terminal {
             height,
             used: 0,
             virtuals: Vec::new(),
+            animation: Default::default(),
         });
         Ok((handle, assigned))
     }
@@ -265,6 +268,9 @@ impl Terminal {
         let image = self.graphics.tables[slot].remove(index);
         let grid = self.grid_of_mut(slot);
         grid.delete_image_placements(image.handle);
+        if image.id != 0 {
+            grid.drop_virtual_children(image.id, None);
+        }
         self.push_event(Event::ImageFree(image.handle));
     }
 

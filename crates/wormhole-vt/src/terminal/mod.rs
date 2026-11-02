@@ -141,8 +141,9 @@ pub use builder::Builder;
 pub use dump::StateDump;
 pub use event::{Event, Progress, ProgressState, PromptKind, ShellMark, Terminator};
 pub use graphics::{
-    Compression, IMAGE_BUDGET_BYTES, ImageError, ImageFormat, ImageUpload, MAX_IMAGES, Placeholder,
-    VirtualPlacement, placeholder_at, strip_placeholders,
+    Animation, AnimationState, Blend, Compression, FrameBase, FrameCompose, FrameRect, FrameTicket,
+    FrameUpload, Gap, IMAGE_BUDGET_BYTES, ImageError, ImageFormat, ImageUpload, Loops, MAX_FRAMES,
+    MAX_IMAGES, Placeholder, Position, Tick, VirtualPlacement, placeholder_at, strip_placeholders,
 };
 pub use limits::Limits;
 pub use osc::cwd::CWD_REPORTS_MAX;

@@ -8,7 +8,7 @@
 //! "On the screen" means the live screen's rows, not the history; cell coordinates `x` and `y`
 //! count from 1 at the screen's top left corner.
 
-use crate::terminal::Terminal;
+use crate::terminal::{Event, Terminal};
 use crate::types::ImageHandle;
 
 use super::command::{Command, Selector};
@@ -49,6 +49,25 @@ impl Terminal {
                         .collect(),
                 )
             }
+            // The pictures whose frames go: the one named, else those placed on the screen.
+            Selector::Frames => {
+                let by_name = match (command.id, command.number) {
+                    (0, 0) => None,
+                    (0, number) => Some(table.by_number(number)),
+                    (id, _) => Some(table.by_id(id)),
+                };
+                let grid = self.grid_of(slot);
+                Some(match by_name {
+                    Some(index) => {
+                        index.and_then(|i| table.get(i)).map(|image| image.handle).into_iter().collect()
+                    }
+                    None => table
+                        .iter()
+                        .filter(|image| grid.is_placed(image.handle))
+                        .map(|image| image.handle)
+                        .collect(),
+                })
+            }
             Selector::IdRange => Some(
                 table
                     .iter()
@@ -63,12 +82,17 @@ impl Terminal {
             .then_some(command.placement)
             .filter(|&p| p != 0);
 
+        if command.selector == Selector::Frames {
+            self.delete_frames(slot, named.unwrap_or_default(), command.free);
+            return Ok(());
+        }
         let mut removed: Vec<ImageHandle> = Vec::new();
         let selector = command.selector;
         let z = command.z;
         let screen = self.grid_of_mut(slot);
         match selector {
-            Selector::Frames => return Ok(()),
+            // Taken care of above.
+            Selector::Frames => {}
             Selector::ById | Selector::ByNumber | Selector::IdRange => {
                 let handles = named.as_deref().unwrap_or(&[]);
                 screen.delete_placements(
@@ -101,35 +125,70 @@ impl Terminal {
             }
         }
 
-        // The virtual placements of the pictures a selector names go with them.
+        // The virtual placements of the pictures a selector names go with them, and what is
+        // placed relative to them.
         if let Some(handles) = &named {
             for &handle in handles {
                 let table = &mut self.graphics.tables[slot];
-                if let Some(image) = table.find(handle).and_then(|i| table.get_mut(i)) {
-                    image.virtuals.retain(|v| only_placement.is_some_and(|p| v.placement_id != p));
+                let Some(image) = table.find(handle).and_then(|i| table.get_mut(i)) else { continue };
+                image.virtuals.retain(|v| only_placement.is_some_and(|p| v.placement_id != p));
+                let image_id = image.id;
+                if image_id != 0 {
+                    self.grid_of_mut(slot).drop_virtual_children(image_id, only_placement);
                 }
             }
         }
 
+        // "If the image that a relative placement is a placement of has no more placements, the
+        // image is deleted as well": the children that went with their parent free their picture.
+        let orphaned = self.grid_of_mut(slot).take_orphaned();
+        self.free_unreferenced(slot, orphaned);
+
         if command.free {
-            // In the order the pictures came (handles are given out in order): the events the host
-            // hears must not depend on a hash set's random order, or the same bytes fed in other
-            // pieces would tell it the frees in another order.
-            let mut candidates: Vec<ImageHandle> =
-                removed.into_iter().chain(named.into_iter().flatten()).collect();
-            candidates.sort_unstable();
-            candidates.dedup();
-            for handle in candidates {
-                let screen = self.grid_of(slot);
-                let table = &self.graphics.tables[slot];
-                let Some(index) = table.find(handle) else { continue };
-                let referenced =
-                    screen.is_placed(handle) || table.get(index).is_some_and(|i| !i.virtuals.is_empty());
-                if !referenced {
-                    self.free_image(slot, index);
-                }
-            }
+            let candidates = removed.into_iter().chain(named.into_iter().flatten()).collect();
+            self.free_unreferenced(slot, candidates);
         }
         Ok(())
+    }
+
+    /// `d=f`: the frames but the root go from each picture named, and the animation stops. A
+    /// capital frees a picture nothing is placed from too, like the other capitals.
+    fn delete_frames(&mut self, slot: usize, handles: Vec<ImageHandle>, free: bool) {
+        let table = &mut self.graphics.tables[slot];
+        let mut cleared = Vec::new();
+        for &handle in &handles {
+            if let Some(index) = table.find(handle)
+                && table.get(index).is_some_and(|image| image.animation.frame_count() > 1)
+            {
+                table.clear_frames(index);
+                cleared.push(handle);
+            }
+        }
+        for handle in cleared {
+            self.push_event(Event::ImageFramesCleared(handle));
+            self.animation_changed(handle);
+        }
+        if free {
+            self.free_unreferenced(slot, handles);
+        }
+    }
+
+    /// Free the pictures among `candidates` that nothing is placed from and no virtual placement
+    /// names. In the order the pictures came (handles are given out in order): the events the
+    /// host hears must not depend on a hash set's random order, or the same bytes fed in other
+    /// pieces would tell it the frees in another order.
+    fn free_unreferenced(&mut self, slot: usize, mut candidates: Vec<ImageHandle>) {
+        candidates.sort_unstable();
+        candidates.dedup();
+        for handle in candidates {
+            let screen = self.grid_of(slot);
+            let table = &self.graphics.tables[slot];
+            let Some(index) = table.find(handle) else { continue };
+            let referenced =
+                screen.is_placed(handle) || table.get(index).is_some_and(|i| !i.virtuals.is_empty());
+            if !referenced {
+                self.free_image(slot, index);
+            }
+        }
     }
 }

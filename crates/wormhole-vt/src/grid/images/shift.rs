@@ -24,6 +24,9 @@ impl Grid {
         let at_screen_top = from == 0;
         let n = n as i64;
         self.placements.list.retain_mut(|p| {
+            if p.rel.is_some() {
+                return true;
+            }
             let bottom = p.end() - 1;
             if bottom < first || p.top > last {
                 return true;
@@ -50,6 +53,7 @@ impl Grid {
                 false
             }
         });
+        self.drop_orphans();
         self.all_dirty = true;
     }
 
@@ -63,7 +67,7 @@ impl Grid {
         }
         let first_below = self.top_serial() as i64 + below as i64;
         self.placements.list.retain_mut(|p| {
-            if p.end() <= first_below {
+            if p.rel.is_some() || p.end() <= first_below {
                 true
             } else if p.top >= first_below {
                 p.top += n as i64;
@@ -72,6 +76,7 @@ impl Grid {
                 false
             }
         });
+        self.drop_orphans();
         self.all_dirty = true;
     }
 }

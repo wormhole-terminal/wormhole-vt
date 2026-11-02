@@ -153,6 +153,9 @@ impl Terminal {
         let cell = self.cell_size();
         let offset = (command.offset_x.min(cell.0 - 1), command.offset_y.min(cell.1 - 1));
         let geometry = geometry::requested(source, command.cols, command.rows, offset, cell);
+        if command.is_relative() {
+            return self.put_relative(slot, (handle, id), command, geometry);
+        }
         if command.unicode_placeholder {
             let virtual_placement = VirtualPlacement {
                 image: handle,

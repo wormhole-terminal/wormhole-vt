@@ -10,7 +10,7 @@
 //! [`Terminal::replies`]: crate::terminal::Terminal::replies
 
 use super::Terminal;
-use super::graphics::ImageUpload;
+use super::graphics::{FrameCompose, FrameUpload, ImageUpload};
 use crate::grid::DroppedHistory;
 use crate::types::ImageHandle;
 
@@ -216,6 +216,22 @@ pub enum Event {
     /// A picture is gone (deleted, replaced, evicted, or its screen was left): the host drops the
     /// pixels it kept under the handle.
     ImageFree(ImageHandle),
+    /// Data for a frame of an animated kitty picture (`a=f`), to decode and compose onto the
+    /// frame's canvas; see [`FrameUpload`]. The host answers with
+    /// [`Terminal::frame_decoded`](crate::terminal::Terminal::frame_decoded). Apply the frame
+    /// events of a picture ([`ImageFrame`](Event::ImageFrame), [`ImageCompose`](Event::ImageCompose),
+    /// [`ImageFramesCleared`](Event::ImageFramesCleared)) in the order they arrive.
+    ImageFrame(FrameUpload),
+    /// A rectangle of one frame composed onto another (`a=c`).
+    ImageCompose(FrameCompose),
+    /// The program deleted a picture's animation frames (`a=d,d=f`): the host keeps the root
+    /// frame, the picture itself, and drops the others.
+    ImageFramesCleared(ImageHandle),
+    /// The plan of a picture's animation changed (a frame or gap was added, the animation was
+    /// started, stopped or re-aimed): read it again with
+    /// [`Terminal::animation`](crate::terminal::Terminal::animation). Not sent twice in a row
+    /// for one picture.
+    ImageAnimation(ImageHandle),
     /// DECCOLM changed the width of the screen (mode 40 allows it, and so does
     /// [`Policy::window_ops`](crate::terminal::Policy::window_ops); without it DECCOLM clears and
     /// homes the screen but never changes the width, and this event is not sent): the host should
@@ -315,6 +331,10 @@ impl Terminal {
             event,
             Event::ImageData(_)
                 | Event::ImageFree(_)
+                | Event::ImageFrame(_)
+                | Event::ImageCompose(_)
+                | Event::ImageFramesCleared(_)
+                | Event::ImageAnimation(_)
                 | Event::FullReset
                 | Event::ModesChanged
                 | Event::ColorsChanged

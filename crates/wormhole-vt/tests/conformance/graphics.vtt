@@ -108,3 +108,91 @@ feed \e]1337;File=name=YQ==:iVBORw0KGgoAAAANSUhEUgAAABAAAAAgCAYAAAAAAAAA\ax
 cursor 1,2
 screen
 |x|
+
+# Animation and relative placements. The pixels are not on the screen text; these check what the
+# terminal answers, and that the cursor stays where a relative placement is concerned.
+
+test a kitty animation frame is answered like a picture
+spec kitty graphics protocol, "Transferring animation frame data": a=f,i= sends a frame in the same way as the picture's data
+size 20 6
+feed \e_Ga=t,f=24,s=1,v=1,i=7,q=2;AAAA\e\\
+feed \e_Ga=f,f=24,s=1,v=1,i=7;AAAA\e\\
+reply \e_Gi=7;OK\e\\
+known-fail: alacritty – animation is not read: no reply
+
+test a kitty animation frame for a picture that is not there is ENOENT
+spec kitty graphics protocol, "Composing animation frames": a missing image or frame is ENOENT; the codes are those of "Terminal Responses"
+size 20 6
+feed \e_Ga=f,f=24,s=1,v=1,i=7;AAAA\e\\
+reply~ \e_Gi=7;ENOENT:*\e\\
+known-fail: alacritty – animation is not read: no reply
+
+test kitty animation control answers OK for a frame that exists and ENOENT for one that does not
+spec kitty graphics protocol, "Controlling animations": a=a with s, v, c, r and z; a missing frame is ENOENT
+size 20 6
+feed \e_Ga=t,f=24,s=1,v=1,i=7,q=2;AAAA\e\\
+feed \e_Ga=f,f=24,s=1,v=1,i=7,z=50,q=2;AAAA\e\\
+feed \e_Ga=a,i=7,s=3,v=2,c=2,r=1,z=30\e\\
+reply \e_Gi=7;OK\e\\
+feed \e_Ga=a,i=7,c=3\e\\
+reply~ \e_Gi=7;ENOENT:*\e\\
+known-fail: alacritty – animation is not read: no reply
+
+test kitty frame composition checks its rectangles
+spec kitty graphics protocol, "Composing animation frames": out of bounds is EINVAL; the same frame with overlapping rectangles is EINVAL
+size 20 6
+feed \e_Ga=t,f=24,s=2,v=1,i=7,q=2;AAAAAAAA\e\\
+feed \e_Ga=f,f=24,s=2,v=1,i=7,q=2;AAAAAAAA\e\\
+feed \e_Ga=c,i=7,r=1,c=2,w=1,h=1\e\\
+reply \e_Gi=7;OK\e\\
+feed \e_Ga=c,i=7,r=1,c=2,w=3\e\\
+reply~ \e_Gi=7;EINVAL:*\e\\
+feed \e_Ga=c,i=7,r=1,c=1,w=2,X=0,x=1\e\\
+reply~ \e_Gi=7;EINVAL:*\e\\
+known-fail: alacritty – animation is not read: no reply
+
+test a relative kitty placement leaves the cursor where it was
+spec kitty graphics protocol, "Relative placements": the cursor must not move after a relative placement
+size 20 6
+feed \e_Ga=T,f=24,s=8,v=16,i=1,p=1,C=1,q=2;
+repeat 128 AAAA
+feed \e\\
+feed \e_Ga=T,f=24,s=8,v=16,i=2,p=1,P=1,Q=1,H=2,V=1,q=2;
+repeat 128 AAAA
+feed \e\\x
+cursor 1,2
+screen
+|x|
+known-fail: alacritty – the graphics protocol is not read: the cursor stays
+
+test a relative kitty placement without its parent is ENOPARENT
+spec kitty graphics protocol, "Relative placements": a reference to a placement that does not exist is ENOPARENT
+size 20 6
+feed \e_Ga=T,f=24,s=1,v=1,i=2,p=1,P=9,Q=1;AAAA\e\\
+reply~ \e_Gi=2,p=1;ENOPARENT:*\e\\
+known-fail: alacritty – the graphics protocol is not read: no reply
+
+test a relative kitty placement that would be its own ancestor is ECYCLE
+spec kitty graphics protocol, "Relative placements": a placement that would create a cycle is refused with ECYCLE
+size 20 6
+feed \e_Ga=T,f=24,s=1,v=1,i=1,p=1,C=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=2,p=1,P=1,Q=1,q=2;AAAA\e\\
+feed \e_Ga=p,i=1,p=1,P=2,Q=1\e\\
+reply~ \e_Gi=1,p=1;ECYCLE:*\e\\
+known-fail: alacritty – the graphics protocol is not read: no reply
+
+test a chain of more than eight relative placements is ETOODEEP
+spec kitty graphics protocol, "Relative placements": an implementation must allow a chain of at least 8; past its limit ETOODEEP
+size 20 6
+feed \e_Ga=T,f=24,s=1,v=1,i=1,p=1,C=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=2,p=1,P=1,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=3,p=1,P=2,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=4,p=1,P=3,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=5,p=1,P=4,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=6,p=1,P=5,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=7,p=1,P=6,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=8,p=1,P=7,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=9,p=1,P=8,Q=1,q=2;AAAA\e\\
+feed \e_Ga=T,f=24,s=1,v=1,i=10,p=1,P=9,Q=1;AAAA\e\\
+reply~ \e_Gi=10,p=1;ETOODEEP:*\e\\
+known-fail: alacritty – the graphics protocol is not read: no reply
