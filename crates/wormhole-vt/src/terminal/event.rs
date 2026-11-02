@@ -220,13 +220,20 @@ pub enum Event {
     /// frame's canvas; see [`FrameUpload`]. The host answers with
     /// [`Terminal::frame_decoded`](crate::terminal::Terminal::frame_decoded). Apply the frame
     /// events of a picture ([`ImageFrame`](Event::ImageFrame), [`ImageCompose`](Event::ImageCompose),
-    /// [`ImageFramesCleared`](Event::ImageFramesCleared)) in the order they arrive.
+    /// [`ImageFrameDeleted`](Event::ImageFrameDeleted)) in the order they arrive.
     ImageFrame(FrameUpload),
     /// A rectangle of one frame composed onto another (`a=c`).
     ImageCompose(FrameCompose),
-    /// The program deleted a picture's animation frames (`a=d,d=f`): the host keeps the root
-    /// frame, the picture itself, and drops the others.
-    ImageFramesCleared(ImageHandle),
+    /// The program deleted one frame of a picture's animation (`a=d,d=f`, kitty's
+    /// `handle_delete_frame_command`): the host drops that frame's canvas, and the frames after it
+    /// move up one. `frame` is counted from 1, the root frame being 1; the root frame can be the one
+    /// deleted, and the picture is then what the next frame was.
+    ImageFrameDeleted {
+        /// The picture.
+        image: ImageHandle,
+        /// The frame deleted.
+        frame: u32,
+    },
     /// The plan of a picture's animation changed (a frame or gap was added, the animation was
     /// started, stopped or re-aimed): read it again with
     /// [`Terminal::animation`](crate::terminal::Terminal::animation). Not sent twice in a row
@@ -333,7 +340,7 @@ impl Terminal {
                 | Event::ImageFree(_)
                 | Event::ImageFrame(_)
                 | Event::ImageCompose(_)
-                | Event::ImageFramesCleared(_)
+                | Event::ImageFrameDeleted { .. }
                 | Event::ImageAnimation(_)
                 | Event::FullReset
                 | Event::ModesChanged

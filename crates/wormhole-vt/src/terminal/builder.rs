@@ -173,10 +173,14 @@ impl Builder {
 
     /// Make the terminal.
     pub fn build(self) -> Terminal {
-        let grid = Grid::new(self.cols, self.rows, history_bytes(self.scrollback, self.cols));
+        let mut grid = Grid::new(self.cols, self.rows, history_bytes(self.scrollback, self.cols));
         let (cols, rows) = (grid.cols(), grid.rows());
+        // Both screens read placeholders, for the placements relative to a virtual placement.
+        let mut other = Grid::new(cols, rows, 0);
+        grid.set_placeholder_key(graphics::key_at);
+        other.set_placeholder_key(graphics::key_at);
         let mut term = Terminal {
-            other: Grid::new(cols, rows, 0),
+            other,
             grid,
             cols,
             rows,

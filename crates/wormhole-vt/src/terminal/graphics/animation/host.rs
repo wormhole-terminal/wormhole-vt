@@ -49,19 +49,16 @@ pub struct FrameRect {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FrameTicket {
     pub(crate) token: ImageHandle,
-    pub(crate) image: ImageHandle,
-    pub(crate) frame: u32,
-    pub(crate) created: bool,
 }
 
 impl FrameTicket {
     /// What the reply queue waits on for a frame: not a picture's handle, so it never meets one
-    /// (the top bit is set), and made from the picture and the frame instead of a counter, so that
-    /// the engine's state does not depend on how many frames came before (a replica started
-    /// halfway has not seen them). Two uploads of one frame waiting at once share it, which is
-    /// right: the host answers in the order the engine sent them, and the queue settles the first.
-    pub(crate) fn token(image: ImageHandle, frame: u32) -> ImageHandle {
-        ImageHandle(1 << 63 | (image.get() & 0xFFFF_FFFF_FFFF) << 16 | u64::from(frame & 0xFFFF))
+    /// (the top bit is set), and made from the picture and the number of uploads it has had
+    /// (`serial`) instead of a counter of the terminal's, so that the engine's state does not depend
+    /// on how many frames came before (a replica started halfway has not seen them) and no two
+    /// uploads waiting at once share one.
+    pub(crate) fn token(image: ImageHandle, serial: u32) -> ImageHandle {
+        ImageHandle(1 << 63 | (image.get() & 0xFF_FFFF_FFFF) << 24 | u64::from(serial & 0xFF_FFFF))
     }
 }
 
@@ -74,9 +71,10 @@ impl FrameTicket {
 ///
 /// The host must call [`Terminal::frame_decoded`](crate::terminal::Terminal::frame_decoded) once
 /// for each, in the order they were sent, when it has the pixels or has given up (the program's `OK` waits for a PNG or
-/// compressed data; the replies after it wait behind it). A frame that could not be decoded
-/// is the base canvas alone: the engine takes the frame away again if it is the last, and
-/// otherwise keeps it, so the host must keep it too.
+/// compressed data; the replies after it wait behind it). A frame whose data could not be
+/// decoded is still a frame: the engine decided its number when the command came, and does not
+/// take it away. The host builds it from `base` alone, as if the data were absent, and answers
+/// with the error so the program is told.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FrameUpload {
     /// The picture the frame belongs to.

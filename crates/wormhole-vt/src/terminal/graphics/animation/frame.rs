@@ -7,6 +7,14 @@
 //! frame `r` rather than make a new one (its canvas is the frame itself); `X=1` to overwrite
 //! pixels instead of blending; `z` the gap.
 //!
+//! As kitty has it (`handle_animation_frame_load_command` in its `graphics.c`): an `r` that is 0
+//! or past the last frame makes a **new** frame, it is not an error; a base frame `c` that does not
+//! exist is `EINVAL`, not `ENOENT`; `c` means nothing when a frame is edited.
+//!
+//! Which frame a command makes is decided here, by the commands alone, never by how long the host
+//! takes to decode: a frame whose data cannot be decoded is still a frame (the host builds it from
+//! its base canvas alone, see [`FrameUpload`]) and the program is told `ENODATA`.
+//!
 //! The engine checks the keys and the sizes, counts the frame against the budget and tells the
 //! host to do the pixels ([`FrameUpload`]).
 
@@ -49,12 +57,9 @@ impl Terminal {
             return Err(Error::Invalid("the frame's data is outside the picture"));
         }
 
-        // The frame: one that exists (`r`), or a new one at the end.
-        let editing = command.rows != 0;
+        // The frame: one that exists (`r`), or a new one at the end (`r` of 0 or past the last).
+        let editing = command.rows != 0 && command.rows as usize <= frames;
         let (frame, base) = if editing {
-            if command.rows as usize > frames {
-                return Err(Error::NotFound);
-            }
             (command.rows, FrameBase::Itself)
         } else {
             if frames >= MAX_FRAMES {
@@ -63,7 +68,7 @@ impl Terminal {
             let base = match command.cols {
                 0 => FrameBase::Color(command.offset_y),
                 n if n as usize <= frames => FrameBase::Frame(n),
-                _ => return Err(Error::NotFound),
+                _ => return Err(Error::Invalid("no frame with that number to start from")),
             };
             (frames as u32 + 1, base)
         };
@@ -96,6 +101,13 @@ impl Terminal {
         };
         let table = &mut self.graphics.tables[slot];
         table.touch(index);
+        // Each upload waiting for the host has a token of its own, made from the picture's count of
+        // them (not from a counter of the terminal's, which a replica that started later would
+        // not have the same value of).
+        let serial = table.get_mut(index).map_or(0, |image| {
+            image.uploads = image.uploads.wrapping_add(1);
+            image.uploads
+        });
         if editing {
             if let (Some(gap), Some(image)) = (gap, table.get_mut(index)) {
                 image.animation.set_gap(frame as usize - 1, gap);
@@ -104,7 +116,7 @@ impl Terminal {
             table.push_frame(index, gap.unwrap_or(Gap::Millis(DEFAULT_GAP_MS)));
         }
         let decoded_later = checked.format == ImageFormat::Png || command.zlib;
-        let token = FrameTicket::token(handle, frame);
+        let token = FrameTicket::token(handle, serial);
         self.push_event(Event::ImageFrame(FrameUpload {
             image: handle,
             frame,
@@ -115,7 +127,7 @@ impl Terminal {
             format: checked.format,
             compression: if command.zlib { Compression::Zlib } else { Compression::None },
             data: payload,
-            ticket: FrameTicket { token, image: handle, frame, created: !editing },
+            ticket: FrameTicket { token },
         }));
         self.animation_changed(handle);
         Ok(if decoded_later { Flow::Waiting { image: token, assigned } } else { Flow::Done { assigned } })
@@ -137,27 +149,13 @@ impl Terminal {
     }
 
     /// The host decoded the data of a [`FrameUpload`], or could not; see there. Answers the
-    /// program if it was waiting, and takes a new frame that failed away again when it is the last.
+    /// program if it was waiting. A failure changes nothing else: the frame stays a frame.
     pub fn frame_decoded(&mut self, ticket: FrameTicket, result: Result<(), ImageError>) {
         let answer = result.map_err(|error| match error {
             ImageError::BadData => Error::BadData("the data could not be decoded as that format"),
             ImageError::TooBig => Error::TooBig,
             ImageError::Unsupported => Error::Unsupported("that picture format"),
         });
-        if answer.is_err() && ticket.created {
-            for slot in 0..2 {
-                let table = &mut self.graphics.tables[slot];
-                if let Some(index) = table.find(ticket.image) {
-                    let last = table
-                        .get(index)
-                        .is_some_and(|image| image.animation.frame_count() == ticket.frame as usize);
-                    if last {
-                        table.pop_frame(index);
-                        self.animation_changed(ticket.image);
-                    }
-                }
-            }
-        }
         self.replies.settle(ticket.token, answer);
     }
 }

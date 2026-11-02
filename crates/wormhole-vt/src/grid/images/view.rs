@@ -2,7 +2,7 @@
 
 use crate::types::{Extent, ImageHandle, ImagePlacement, Line, SourceRect};
 
-use super::{Grid, Placement, VirtualOrigin};
+use super::{Grid, Placement};
 
 /// A placement as a delete asks about it. Lines count as everywhere (0 is the live screen's top
 /// row), but as `i64` so that a picture far up in the history is still a number.
@@ -88,17 +88,6 @@ impl Grid {
     /// the size of a cell in pixels, which a placement cut at the screen's edge needs to know how
     /// much of its picture is left.
     pub fn copy_placements(&self, out: &mut Vec<ImagePlacement>, cell: (u16, u16)) {
-        self.copy_placements_with(out, cell, &|_, _| None);
-    }
-
-    /// [`copy_placements`](Self::copy_placements) for a terminal that can say where the
-    /// placeholders of a virtual placement are, for the placements relative to one.
-    pub(crate) fn copy_placements_with(
-        &self,
-        out: &mut Vec<ImagePlacement>,
-        cell: (u16, u16),
-        virtual_origin: VirtualOrigin<'_>,
-    ) {
         out.clear();
         if self.placements.is_empty() {
             return;
@@ -106,8 +95,14 @@ impl Grid {
         let top = self.top_serial() as i64;
         let first = -(self.offset as i64);
         let last = first + self.rows as i64 - 1;
+        // Placeholders are looked for in the view; nothing relative: the stored places.
+        let resolved = self.resolved(first, self.rows);
         for (i, p) in self.placements.list.iter().enumerate() {
-            let Some((serial, col)) = self.origin(i, virtual_origin) else { continue };
+            let origin = match &resolved {
+                Some(all) => all.get(i).copied().flatten(),
+                None => Some((p.top, p.col as i64)),
+            };
+            let Some((serial, col)) = origin else { continue };
             // A column left of the screen or right of it has no cell to start in.
             if col < 0 || col >= self.cols as i64 {
                 continue;

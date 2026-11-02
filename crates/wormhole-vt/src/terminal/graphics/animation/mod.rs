@@ -9,7 +9,7 @@
 //! |-|--------|------|
 //! | frames' pixels | no (it has no decoder and no pixels) | keeps one canvas per frame, built from the events |
 //! | frame count, gaps, state, loop count, current frame | yes: [`Animation`] | reads it |
-//! | quota | every frame counts `width * height * 4` bytes against the screen's picture budget | frees what [`Event::ImageFree`](crate::terminal::Event::ImageFree) and [`Event::ImageFramesCleared`](crate::terminal::Event::ImageFramesCleared) name |
+//! | quota | every frame counts `width * height * 4` bytes against the screen's picture budget | frees what [`Event::ImageFree`](crate::terminal::Event::ImageFree) and [`Event::ImageFrameDeleted`](crate::terminal::Event::ImageFrameDeleted) name |
 //! | time | none | its own clock |
 //!
 //! The host hears about pixels as [`Event::ImageFrame`](crate::terminal::Event::ImageFrame) (data
@@ -36,7 +36,9 @@
 //! - [`Animation::tick`] says, for a frame being shown, how long to show it and what comes next,
 //!   or that nothing does ([`Tick::Hold`]): the animation is stopped, finished its loops, or waits
 //!   for more frames. Gapless frames come out as a wait of zero, so the host skips them without
-//!   showing them. A cycle that takes no time at all is a `Hold`, never a busy loop.
+//!   showing them. A cycle that takes no time at all is a `Hold`, never a busy loop. Each call is
+//!   constant time (a pass's duration is kept as the gaps change), and a host that was away skips
+//!   the whole passes it missed with [`Animation::skip_passes`] instead of stepping through them.
 //! - The host calls [`Terminal::set_animation_current`](crate::terminal::Terminal::set_animation_current)
 //!   when it moves on, so that a program that stops the animation leaves it on the frame the viewer
 //!   saw (kitty keeps its own running position the same way), and a replica of the screen agrees.
@@ -67,7 +69,7 @@ mod host;
 mod plan;
 
 pub use host::{Blend, FrameBase, FrameCompose, FrameRect, FrameTicket, FrameUpload};
-pub use plan::{Animation, AnimationState, Gap, Loops, MAX_FRAMES, Position, Tick};
+pub use plan::{Animation, AnimationState, Gap, Loops, MAX_FRAMES, Position, Skipped, Tick};
 
 use crate::terminal::Terminal;
 use crate::types::ImageHandle;

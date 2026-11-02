@@ -143,7 +143,7 @@ pub use event::{Event, Progress, ProgressState, PromptKind, ShellMark, Terminato
 pub use graphics::{
     Animation, AnimationState, Blend, Compression, FrameBase, FrameCompose, FrameRect, FrameTicket,
     FrameUpload, Gap, IMAGE_BUDGET_BYTES, ImageError, ImageFormat, ImageUpload, Loops, MAX_FRAMES,
-    MAX_IMAGES, Placeholder, Position, Tick, VirtualPlacement, placeholder_at, strip_placeholders,
+    MAX_IMAGES, Placeholder, Position, Skipped, Tick, VirtualPlacement, placeholder_at, strip_placeholders,
 };
 pub use limits::Limits;
 pub use osc::cwd::CWD_REPORTS_MAX;

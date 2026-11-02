@@ -15,6 +15,7 @@ fn picture(handle: u64, id: u32) -> Image {
         used: 0,
         virtuals: Vec::new(),
         animation: Default::default(),
+        uploads: 0,
     }
 }
 

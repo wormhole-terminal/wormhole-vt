@@ -16,6 +16,9 @@ use super::reply::Error;
 
 impl Terminal {
     pub(super) fn kitty_delete(&mut self, command: &Command) -> Result<(), Error> {
+        if command.selector == Selector::Frames {
+            return self.delete_frame(command);
+        }
         let slot = self.screen_slot();
         let (cursor_line, cursor_col) = (self.cursor.y as i64, self.cursor.x);
         let cell = (i64::from(command.y) - 1, (command.x as usize).wrapping_sub(1));
@@ -49,25 +52,6 @@ impl Terminal {
                         .collect(),
                 )
             }
-            // The pictures whose frames go: the one named, else those placed on the screen.
-            Selector::Frames => {
-                let by_name = match (command.id, command.number) {
-                    (0, 0) => None,
-                    (0, number) => Some(table.by_number(number)),
-                    (id, _) => Some(table.by_id(id)),
-                };
-                let grid = self.grid_of(slot);
-                Some(match by_name {
-                    Some(index) => {
-                        index.and_then(|i| table.get(i)).map(|image| image.handle).into_iter().collect()
-                    }
-                    None => table
-                        .iter()
-                        .filter(|image| grid.is_placed(image.handle))
-                        .map(|image| image.handle)
-                        .collect(),
-                })
-            }
             Selector::IdRange => Some(
                 table
                     .iter()
@@ -82,10 +66,6 @@ impl Terminal {
             .then_some(command.placement)
             .filter(|&p| p != 0);
 
-        if command.selector == Selector::Frames {
-            self.delete_frames(slot, named.unwrap_or_default(), command.free);
-            return Ok(());
-        }
         let mut removed: Vec<ImageHandle> = Vec::new();
         let selector = command.selector;
         let z = command.z;
@@ -151,26 +131,42 @@ impl Terminal {
         Ok(())
     }
 
-    /// `d=f`: the frames but the root go from each picture named, and the animation stops. A
-    /// capital frees a picture nothing is placed from too, like the other capitals.
-    fn delete_frames(&mut self, slot: usize, handles: Vec<ImageHandle>, free: bool) {
-        let table = &mut self.graphics.tables[slot];
-        let mut cleared = Vec::new();
-        for &handle in &handles {
-            if let Some(index) = table.find(handle)
-                && table.get(index).is_some_and(|image| image.animation.frame_count() > 1)
-            {
-                table.clear_frames(index);
-                cleared.push(handle);
+    /// `d=f` and `d=F`: delete one frame of one picture. As kitty does it
+    /// (`handle_delete_frame_command` in its `graphics.c`):
+    ///
+    /// - the picture is named by `i` or `I` (neither is an error, a picture that is not there is
+    ///   nothing to do);
+    /// - the frame is `r` (counted from 1; 0 is the first, and past the last is the last);
+    /// - a picture with only its first frame has no frame to delete: `f` does nothing, and `F`
+    ///   deletes the whole picture, placements and all;
+    /// - otherwise that frame goes, the later ones move up, and the current frame follows the
+    ///   picture it was on (`Animation::remove_frame`). `F` does not free anything more.
+    fn delete_frame(&mut self, command: &Command) -> Result<(), Error> {
+        let slot = self.screen_slot();
+        let table = &self.graphics.tables[slot];
+        let index = match (command.id, command.number) {
+            (0, 0) => return Err(Error::Invalid("no image id or number")),
+            (0, number) => table.by_number(number),
+            (id, _) => table.by_id(id),
+        };
+        let Some(image) = index.and_then(|i| table.get(i)) else { return Ok(()) };
+        let (handle, frames) = (image.handle, image.animation.frame_count());
+        let index = index.unwrap_or_default();
+        if frames == 1 {
+            if command.free {
+                self.free_image(slot, index);
             }
+            return Ok(());
         }
-        for handle in cleared {
-            self.push_event(Event::ImageFramesCleared(handle));
+        let frame = (command.rows as usize).clamp(1, frames);
+        if self.events.len() >= self.limits.events {
+            return Err(Error::TooBig);
+        }
+        if self.graphics.tables[slot].remove_frame(index, frame - 1) {
+            self.push_event(Event::ImageFrameDeleted { image: handle, frame: frame as u32 });
             self.animation_changed(handle);
         }
-        if free {
-            self.free_unreferenced(slot, handles);
-        }
+        Ok(())
     }
 
     /// Free the pictures among `candidates` that nothing is placed from and no virtual placement

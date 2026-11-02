@@ -77,13 +77,14 @@ use crate::types::ImageHandle;
 
 pub use animation::{
     Animation, AnimationState, Blend, FrameBase, FrameCompose, FrameRect, FrameTicket, FrameUpload, Gap,
-    Loops, MAX_FRAMES, Position, Tick,
+    Loops, MAX_FRAMES, Position, Skipped, Tick,
 };
 pub use images::{IMAGE_BUDGET_BYTES, MAX_IMAGES};
 pub use placeholder::{Placeholder, placeholder_at, strip_placeholders};
 pub use upload::{Compression, ImageError, ImageFormat, ImageUpload, VirtualPlacement};
 
 pub(super) use apc::PAYLOAD_MAX;
+pub(super) use placeholder::key_at;
 pub(in crate::terminal) use reply::{Error as AnswerError, Target};
 
 use apc::ApcReader;

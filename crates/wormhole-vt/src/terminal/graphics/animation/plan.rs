@@ -1,6 +1,7 @@
 //! The plan of an animation: frames' gaps, state, loops and the current frame; and the stepper
 //! a host plays it with. See the [parent module](super) for why it is shaped like this.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Most frames one picture has, the root frame included. Past it a new frame is refused with
@@ -27,11 +28,15 @@ impl Gap {
         if z < 0 { Gap::Gapless } else { Gap::Millis(z.unsigned_abs()) }
     }
 
-    fn duration(self) -> Duration {
+    fn millis(self) -> u64 {
         match self {
-            Gap::Millis(ms) => Duration::from_millis(u64::from(ms)),
-            Gap::Gapless => Duration::ZERO,
+            Gap::Millis(ms) => u64::from(ms),
+            Gap::Gapless => 0,
         }
+    }
+
+    fn duration(self) -> Duration {
+        Duration::from_millis(self.millis())
     }
 }
 
@@ -82,11 +87,27 @@ pub enum Tick {
     },
 }
 
+/// Where an animation has got to after a long time; see [`Animation::skip_passes`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Skipped {
+    /// The position to go on from.
+    pub position: Position,
+    /// How much of the time is still to be played from `position`: less than one pass.
+    pub lag: Duration,
+    /// The animation played all its passes in that time and stands on its last frame.
+    pub finished: bool,
+}
+
 /// The plan of one picture's animation: read it with [`Terminal::animation`](crate::terminal::Terminal::animation).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Animation {
-    /// One gap per frame; never empty (the root frame is the picture itself).
-    gaps: Vec<Gap>,
+    /// One gap per frame; never empty (the root frame is the picture itself). Shared, so that a
+    /// host that reads the plan every frame copies a pointer; a change copies the gaps only if a
+    /// reader still holds the old ones.
+    gaps: Arc<Vec<Gap>>,
+    /// The time one pass through the frames takes, in milliseconds: kept as the gaps change so that
+    /// [`tick`](Self::tick) does not add them up.
+    pass_ms: u64,
     state: AnimationState,
     loops: Loops,
     current: usize,
@@ -96,7 +117,8 @@ pub struct Animation {
 impl Default for Animation {
     fn default() -> Animation {
         Animation {
-            gaps: vec![Gap::Millis(0)],
+            gaps: Arc::new(vec![Gap::Millis(0)]),
+            pass_ms: 0,
             state: AnimationState::Stopped,
             loops: Loops::Infinite,
             current: 0,
@@ -119,6 +141,12 @@ impl Animation {
     /// The gaps of all frames, in order.
     pub fn gaps(&self) -> &[Gap] {
         &self.gaps
+    }
+
+    /// How long one pass through the frames takes; zero when no frame has a gap, which is an
+    /// animation with nothing to show over time.
+    pub fn pass_duration(&self) -> Duration {
+        Duration::from_millis(self.pass_ms)
     }
 
     /// What the program asked for: stopped, running or loading.
@@ -160,7 +188,7 @@ impl Animation {
             return Tick::Hold;
         }
         // A pass that takes no time would be a loop the host cannot leave.
-        if self.gaps.iter().all(|gap| gap.duration().is_zero()) {
+        if self.pass_ms == 0 {
             return Tick::Hold;
         }
         let wait = self.gaps[at.frame].duration();
@@ -177,6 +205,37 @@ impl Animation {
             Position { frame: 0, pass }
         };
         Tick::After { wait, next }
+    }
+
+    /// A host that was away (a hidden window) comes back `lag` after the frame at `at` came on:
+    /// skip the whole passes it missed at once, so that catching up costs the frames of one pass
+    /// and not of the time away. Only a running animation has passes to skip; any other, and one
+    /// that takes no time, is returned as it is. A [`Loops::Passes`] animation that would have
+    /// played out in `lag` is `finished`, on its last frame.
+    pub fn skip_passes(&self, at: Position, lag: Duration) -> Skipped {
+        let unchanged = Skipped { position: at, lag, finished: false };
+        let total = u128::from(self.pass_ms) * 1_000_000;
+        if self.state != AnimationState::Running || total == 0 {
+            return unchanged;
+        }
+        let lag_ns = lag.as_nanos();
+        let passes = lag_ns / total;
+        if passes == 0 {
+            return unchanged;
+        }
+        if let Loops::Passes(n) = self.loops
+            && passes >= u128::from(n.saturating_sub(at.pass))
+        {
+            let last = Position { frame: self.gaps.len() - 1, pass: n.saturating_sub(1) };
+            return Skipped { position: last, lag: Duration::ZERO, finished: true };
+        }
+        let rest = lag_ns % total;
+        let pass = at.pass.saturating_add(u32::try_from(passes).unwrap_or(u32::MAX));
+        Skipped {
+            position: Position { frame: at.frame, pass },
+            lag: Duration::new((rest / 1_000_000_000) as u64, (rest % 1_000_000_000) as u32),
+            finished: false,
+        }
     }
 
     // What the commands do.
@@ -204,43 +263,48 @@ impl Animation {
     }
 
     pub(in crate::terminal::graphics) fn set_gap(&mut self, frame: usize, gap: Gap) {
-        if let Some(slot) = self.gaps.get_mut(frame) {
+        let gaps = Arc::make_mut(&mut self.gaps);
+        if let Some(slot) = gaps.get_mut(frame) {
+            self.pass_ms = self.pass_ms - slot.millis() + gap.millis();
             *slot = gap;
         }
     }
 
     /// Add a frame at the end.
     pub(in crate::terminal::graphics) fn push_frame(&mut self, gap: Gap) {
-        self.gaps.push(gap);
+        self.pass_ms += gap.millis();
+        Arc::make_mut(&mut self.gaps).push(gap);
     }
 
-    /// Take the last frame off again (its data could not be decoded). Never the root.
-    pub(in crate::terminal::graphics) fn pop_frame(&mut self) {
-        if self.gaps.len() > 1 {
-            self.gaps.pop();
-            if self.current >= self.gaps.len() {
-                self.current = self.gaps.len() - 1;
-            }
-            self.generation += 1;
+    /// Delete frame `frame` (counted from 0), root included, as kitty does
+    /// (`handle_delete_frame_command` in its `graphics.c`): the later frames move up one, and the
+    /// current frame follows the one it was on, or the next one when that was the frame deleted.
+    /// The last frame left is never deleted. Returns whether one was.
+    pub(in crate::terminal::graphics) fn remove_frame(&mut self, frame: usize) -> bool {
+        if self.gaps.len() < 2 || frame >= self.gaps.len() {
+            return false;
         }
-    }
-
-    /// Delete every frame but the root, and stop.
-    pub(in crate::terminal::graphics) fn clear_frames(&mut self) {
-        self.gaps.truncate(1);
-        self.current = 0;
-        self.state = AnimationState::Stopped;
-        self.loops = Loops::Infinite;
+        let removed = Arc::make_mut(&mut self.gaps).remove(frame);
+        self.pass_ms -= removed.millis();
+        if self.current > self.gaps.len() - 1 {
+            self.current = self.gaps.len() - 1;
+        } else if self.current > frame {
+            self.current -= 1;
+        }
         self.generation += 1;
+        true
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+
     use super::{Animation, AnimationState, Duration, Gap, Loops, Position, Tick};
 
     fn plan(gaps: &[Gap], state: AnimationState, loops: Loops) -> Animation {
-        Animation { gaps: gaps.to_vec(), state, loops, ..Animation::default() }
+        let pass_ms = gaps.iter().map(|gap| gap.millis()).sum();
+        Animation { gaps: Arc::new(gaps.to_vec()), pass_ms, state, loops, ..Animation::default() }
     }
 
     fn after(ms: u64, frame: usize, pass: u32) -> Tick {
@@ -318,12 +382,64 @@ mod tests {
     }
 
     #[test]
-    fn popping_the_last_frame_never_takes_the_root_and_moves_current_in() {
-        let mut a = plan(&[Gap::Millis(5), Gap::Millis(5)], AnimationState::Stopped, Loops::Infinite);
+    fn deleting_a_frame_moves_the_later_ones_up_and_the_current_frame_with_its_picture() {
+        let gaps = [Gap::Millis(1), Gap::Millis(2), Gap::Millis(4), Gap::Millis(8)];
+        let mut a = plan(&gaps, AnimationState::Running, Loops::Infinite);
+        a.set_current(2);
+        assert!(a.remove_frame(0), "the root can go too");
+        assert_eq!((a.gaps(), a.current(), a.pass_duration()), (&gaps[1..], 1, Duration::from_millis(14)));
         a.set_current(1);
-        a.pop_frame();
-        assert_eq!((a.frame_count(), a.current()), (1, 0));
-        a.pop_frame();
-        assert_eq!(a.frame_count(), 1);
+        assert!(a.remove_frame(1));
+        assert_eq!((a.current(), a.frame_count()), (1, 2), "the next frame is the current one now");
+        a.set_current(1);
+        assert!(a.remove_frame(0));
+        assert_eq!((a.current(), a.frame_count()), (0, 1));
+        assert!(!a.remove_frame(0), "the last frame stays");
+        assert!(!a.remove_frame(5));
+    }
+
+    #[test]
+    fn whole_passes_that_were_missed_are_skipped_at_once() {
+        let a = plan(&[Gap::Millis(10), Gap::Millis(20)], AnimationState::Running, Loops::Infinite);
+        let at = Position { frame: 1, pass: 3 };
+        let ms = Duration::from_millis;
+        let skipped = a.skip_passes(at, ms(95));
+        assert_eq!(skipped.position, Position { frame: 1, pass: 6 }, "three passes of 30 ms");
+        assert_eq!((skipped.lag, skipped.finished), (ms(5), false));
+        assert_eq!(a.skip_passes(at, ms(29)).position, at, "less than a pass: nothing to skip");
+        let huge = a.skip_passes(at, Duration::from_secs(u64::MAX / 2));
+        assert!(huge.lag < ms(30) && huge.position.pass >= 3 && !huge.finished);
+        let once = plan(&[Gap::Millis(10), Gap::Millis(20)], AnimationState::Running, Loops::Passes(2));
+        let done = once.skip_passes(Position { frame: 0, pass: 0 }, ms(60));
+        assert_eq!((done.position, done.finished), (Position { frame: 1, pass: 1 }, true));
+        let more = once.skip_passes(Position { frame: 0, pass: 0 }, ms(30));
+        assert_eq!((more.position.pass, more.finished), (1, false), "one of two passes");
+        let stopped = plan(&[Gap::Millis(10)], AnimationState::Stopped, Loops::Infinite);
+        assert_eq!(stopped.skip_passes(at, ms(1000)).position, at);
+        let instant = plan(&[Gap::Gapless], AnimationState::Running, Loops::Infinite);
+        assert_eq!(instant.skip_passes(at, ms(1000)).position, at, "a pass of no time has nothing to skip");
+    }
+
+    #[test]
+    fn the_pass_duration_follows_every_change_of_a_gap() {
+        let mut a = plan(&[Gap::Millis(5), Gap::Gapless], AnimationState::Running, Loops::Infinite);
+        assert_eq!(a.pass_duration(), Duration::from_millis(5));
+        a.set_gap(1, Gap::Millis(7));
+        a.push_frame(Gap::Millis(3));
+        assert_eq!(a.pass_duration(), Duration::from_millis(15));
+        a.set_gap(0, Gap::Gapless);
+        assert_eq!(a.pass_duration(), Duration::from_millis(10));
+        a.set_gap(9, Gap::Millis(1_000));
+        assert_eq!(a.pass_duration(), Duration::from_millis(10), "no such frame");
+    }
+
+    #[test]
+    fn a_plan_is_shared_not_copied_until_it_changes() {
+        let mut a = plan(&[Gap::Millis(5)], AnimationState::Running, Loops::Infinite);
+        let seen = a.clone();
+        assert!(Arc::ptr_eq(&a.gaps, &seen.gaps));
+        a.push_frame(Gap::Millis(1));
+        assert!(!Arc::ptr_eq(&a.gaps, &seen.gaps), "a change leaves the reader's copy alone");
+        assert_eq!(seen.frame_count(), 1);
     }
 }

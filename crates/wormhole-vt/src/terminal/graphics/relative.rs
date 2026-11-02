@@ -14,17 +14,17 @@
 //!   bottom of the screen the way a placement at the cursor is.
 //!
 //! A real placement of the same name is preferred to a virtual one when both could be the
-//! parent. A virtual parent is where its placeholders are: the top left of the cells in the view
-//! (the live screen, or the history if the view is scrolled up) that carry its picture id and
-//! placement id; none in view, no child shown.
+//! parent. A virtual parent is where its placeholders are: the top left of the cells that carry
+//! its picture id and placement id, on the screen for a delete or an erase and in the view to
+//! draw; none there, no child shown. The grid finds them (`grid/images/relative.rs`) with the
+//! reader [`key_at`](super::placeholder::key_at) the terminal gives it.
 
 use crate::grid::{NewPlacement, Parent, Refused, Relative};
 use crate::terminal::Terminal;
-use crate::types::{Cell, ImageHandle, ImagePlacement, Line, RowExtras};
+use crate::types::ImageHandle;
 
 use super::command::Command;
 use super::geometry::Geometry;
-use super::placeholder::placeholder_at;
 use super::reply::Error;
 
 impl Terminal {
@@ -74,35 +74,5 @@ impl Terminal {
         self.grid_of_mut(slot)
             .place_relative(new, Relative { parent, dx: command.offset_h, dy: command.offset_v });
         Ok(())
-    }
-
-    /// The placements in view, with the ones relative to a virtual placement positioned from its
-    /// placeholders. Reads the view's rows, so it is only used while such a child exists.
-    pub(in crate::terminal) fn placements_with_placeholders(&self, out: &mut Vec<ImagePlacement>) {
-        let wanted = self.grid.virtual_parents();
-        let mut found: Vec<((u32, u32), (i64, i64))> = Vec::new();
-        let first = -(self.grid.view_offset() as i64);
-        let (mut cells, mut extras): (Vec<Cell>, RowExtras) = (Vec::new(), RowExtras::default());
-        for line in first..first + self.rows as i64 {
-            let line = Line(line.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32);
-            extras.clear();
-            self.grid.copy_row(line, &mut cells, Some(&mut extras));
-            for (col, cell) in cells.iter().enumerate() {
-                let Some(holder) = placeholder_at(cell, extras.cell(col)) else { continue };
-                let key = (holder.image_id, holder.placement_id);
-                if !wanted.contains(&key) {
-                    continue;
-                }
-                let at = (i64::from(line.0), col as i64);
-                match found.iter_mut().find(|(k, _)| *k == key) {
-                    // The top left of all of them: the least line, and the least column.
-                    Some((_, min)) => *min = (min.0.min(at.0), min.1.min(at.1)),
-                    None => found.push((key, at)),
-                }
-            }
-        }
-        self.grid.copy_placements_with(out, self.cell_px, &|image_id, id| {
-            found.iter().find(|(k, _)| *k == (image_id, id)).map(|(_, at)| *at)
-        });
     }
 }

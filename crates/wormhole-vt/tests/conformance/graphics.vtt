@@ -127,15 +127,17 @@ feed \e_Ga=f,f=24,s=1,v=1,i=7;AAAA\e\\
 reply~ \e_Gi=7;ENOENT:*\e\\
 known-fail: alacritty – animation is not read: no reply
 
-test kitty animation control answers OK for a frame that exists and ENOENT for one that does not
-spec kitty graphics protocol, "Controlling animations": a=a with s, v, c, r and z; a missing frame is ENOENT
+test kitty animation control is not answered, and a missing picture is ENOENT
+spec kitty graphics protocol, "Controlling animations": a=a with s, v, c, r and z; kitty answers it only when the picture is not there
 size 20 6
 feed \e_Ga=t,f=24,s=1,v=1,i=7,q=2;AAAA\e\\
 feed \e_Ga=f,f=24,s=1,v=1,i=7,z=50,q=2;AAAA\e\\
 feed \e_Ga=a,i=7,s=3,v=2,c=2,r=1,z=30\e\\
-reply \e_Gi=7;OK\e\\
+reply none
 feed \e_Ga=a,i=7,c=3\e\\
-reply~ \e_Gi=7;ENOENT:*\e\\
+reply none
+feed \e_Ga=a,i=8,c=1\e\\
+reply~ \e_Gi=8;ENOENT:*\e\\
 known-fail: alacritty – animation is not read: no reply
 
 test kitty frame composition checks its rectangles

@@ -283,3 +283,68 @@ fn hostile_offsets_do_not_overflow() {
     assert_eq!(placed(&r).len(), 1);
     r.term.check_invariants().expect("sound");
 }
+
+#[test]
+fn re_placing_the_root_of_one_chain_under_the_tail_of_another_cannot_make_it_too_deep() {
+    // y11..y18 is a chain with 7 parents above its tail; x1 has x2 hanging on it. Putting x1 under y18
+    // would give x2 eight parents above x1 and x1 itself... one too many in all: refused, and the
+    // placements stay as they were. One link higher it fits.
+    let mut r = rig(40, 12);
+    put(&mut r, 11, 1, "q=2,C=1");
+    for n in 12..=18 {
+        assert_eq!(put(&mut r, n, 1, &format!("P={},Q=1,q=1", n - 1)), "");
+    }
+    put(&mut r, 1, 1, "q=2,C=1");
+    put(&mut r, 2, 1, "P=1,Q=1,H=1,q=2");
+    let before = spots(&r);
+    r.feed(&apc_bare("a=p,i=1,p=1,P=18,Q=1,C=1"));
+    assert!(r.replies().starts_with("\x1b_Gi=1,p=1;ETOODEEP"), "{:?}", r.replies());
+    assert_eq!(spots(&r), before);
+    r.feed(&apc_bare("a=p,i=1,p=1,P=17,Q=1,C=1,q=1"));
+    assert_eq!(r.replies(), "");
+    // x2 now has eight parents above it (y11 to y17, then x1), which is the most allowed.
+    assert_eq!(placed(&r).iter().filter(|p| p.image_id == 2).count(), 1);
+    r.term.check_invariants().expect("sound");
+}
+
+#[test]
+fn a_child_of_a_virtual_placement_is_deleted_by_position_and_by_a_delete_of_the_screens_placements() {
+    let mut r = rig(20, 10);
+    r.feed(&apc("a=t,f=24,s=8,v=16,i=7,q=2", &rgb(8, 16)));
+    r.feed(&apc_bare("a=p,i=7,U=1,p=3,c=1,r=1,q=2"));
+    put(&mut r, 8, 1, "P=7,Q=3,H=1,V=1,q=2,C=1");
+    r.feed("\x1b[4;6H");
+    r.feed(&placeholder(7, 3));
+    let drawn = |r: &Rig| placed(r).iter().filter(|p| p.image_id == 8).count();
+    assert_eq!(drawn(&r), 1, "the child is where the placeholder says (line 4, column 7)");
+    // Deleting what covers its cell (line 5, column 7, counted from 1) deletes it: `d=p`.
+    r.feed(&apc_bare("a=d,d=p,x=7,y=5"));
+    assert_eq!(drawn(&r), 0);
+    // The placeholder still stands: the child is gone, not hidden.
+    put(&mut r, 8, 1, "P=7,Q=3,H=1,V=1,q=2,C=1");
+    assert_eq!(drawn(&r), 1);
+    r.feed(&apc_bare("a=d,d=a"));
+    assert_eq!(drawn(&r), 0, "a=d,d=a deletes the placements on the screen, this one too");
+    put(&mut r, 8, 1, "P=7,Q=3,H=1,V=1,q=2,C=1");
+    assert_eq!(drawn(&r), 1);
+    r.feed(&apc_bare("a=d,d=p,x=1,y=1"));
+    assert_eq!(drawn(&r), 1, "a cell it does not cover leaves it");
+}
+
+#[test]
+fn erasing_the_cells_of_a_child_of_a_virtual_placement_deletes_it() {
+    let mut r = rig(20, 10);
+    r.feed(&apc("a=t,f=24,s=8,v=16,i=7,q=2", &rgb(8, 16)));
+    r.feed(&apc_bare("a=p,i=7,U=1,p=3,c=1,r=1,q=2"));
+    put(&mut r, 8, 1, "P=7,Q=3,V=2,q=2,C=1");
+    r.feed("\x1b[2;3H");
+    r.feed(&placeholder(7, 3));
+    let drawn = |r: &Rig| placed(r).iter().filter(|p| p.image_id == 8).count();
+    assert_eq!(drawn(&r), 1);
+    // The child covers line 4 (the placeholder is on line 2, two lines up): erase that line.
+    r.feed("\x1b[4;1H\x1b[2K");
+    r.feed("\x1b[2;3H");
+    r.feed(&placeholder(7, 3));
+    assert_eq!(drawn(&r), 0, "it went with its cells, and does not come back with the placeholder");
+    r.term.check_invariants().expect("sound");
+}

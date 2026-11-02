@@ -119,12 +119,8 @@ fn a_frame_is_refused_with_the_codes_of_the_protocol() {
     };
     assert!(code(&mut r, "a=f,f=24,i=9", &rgb(4, 2)).starts_with("\x1b_Gi=9;ENOENT"), "no such picture");
     assert!(
-        code(&mut r, "a=f,f=24,r=3,i=1", &rgb(4, 2)).starts_with("\x1b_Gi=1;ENOENT"),
-        "no such frame to edit"
-    );
-    assert!(
-        code(&mut r, "a=f,f=24,c=2,i=1", &rgb(4, 2)).starts_with("\x1b_Gi=1;ENOENT"),
-        "no such base frame"
+        code(&mut r, "a=f,f=24,c=2,i=1", &rgb(4, 2)).starts_with("\x1b_Gi=1;EINVAL"),
+        "no such base frame: EINVAL, as kitty has it"
     );
     assert!(code(&mut r, "a=f,f=24,s=4,v=2,x=1,i=1", &rgb(4, 2)).starts_with("\x1b_Gi=1;EINVAL"), "outside");
     assert!(code(&mut r, "a=f,f=24,s=5,v=2,i=1", &rgb(5, 2)).starts_with("\x1b_Gi=1;EINVAL"), "wider");
@@ -158,7 +154,7 @@ fn a_picture_named_by_number_is_told_its_id() {
 }
 
 #[test]
-fn a_png_frame_is_answered_when_the_host_has_decoded_it_and_a_failed_last_frame_is_taken_back() {
+fn a_png_frame_is_answered_when_the_host_has_decoded_it_and_a_failed_one_is_still_a_frame() {
     let mut r = rig(20, 5);
     let image = picture(&mut r);
     r.feed(&apc("a=f,f=100,i=1", &png(4, 2)));
@@ -168,19 +164,46 @@ fn a_png_frame_is_answered_when_the_host_has_decoded_it_and_a_failed_last_frame_
     assert_eq!(plan(&r, image).frame_count(), 2);
     r.term.frame_decoded(u.ticket, Err(ImageError::BadData));
     assert!(r.replies().starts_with("\x1b_Gi=1;ENODATA"));
-    assert_eq!(plan(&r, image).frame_count(), 1, "the frame that could not be had is gone");
+    assert_eq!(
+        plan(&r, image).frame_count(),
+        2,
+        "the frame that could not be decoded is still a frame: its number was decided by the command"
+    );
 
     r.feed(&apc("a=f,f=100,i=1", &png(4, 2)));
     let u = frame_uploads(&mut r).remove(0);
+    assert_eq!(u.frame, 3, "the next number, whatever became of the one before");
     r.term.frame_decoded(u.ticket, Ok(()));
     assert_eq!(r.replies(), "\x1b_Gi=1;OK\x1b\\");
-    assert_eq!(plan(&r, image).frame_count(), 2);
+    assert_eq!(plan(&r, image).frame_count(), 3);
 
-    // A frame that is not the last when it fails stays (the host holds its base canvas).
-    r.feed(&apc("a=f,f=100,i=1", &png(4, 2)));
-    let first = frame_uploads(&mut r).remove(0);
-    r.feed(&apc("a=f,f=24,i=1", &rgb(4, 2)));
-    r.term.frame_decoded(first.ticket, Err(ImageError::BadData));
+    // Two uploads waiting at once are answered each its own: the second one first, and the
+    // first one's answer still waits for the first.
+    r.feed(&apc("a=f,f=100,i=1,r=2", &png(4, 2)));
+    r.feed(&apc("a=f,f=100,i=1,r=2", &png(4, 2)));
+    let both = frame_uploads(&mut r);
+    assert_eq!(both.len(), 2);
+    assert_ne!(both[0].ticket, both[1].ticket, "two edits of one frame are two tickets");
+    r.term.frame_decoded(both[1].ticket, Err(ImageError::BadData));
+    assert_eq!(r.replies(), "", "the first is still waiting, and the answers go in the order asked");
+    r.term.frame_decoded(both[0].ticket, Ok(()));
+    let replies = r.replies();
+    assert!(replies.starts_with("\x1b_Gi=1;OK") && replies.contains("ENODATA"), "{replies:?}");
+}
+
+#[test]
+fn a_frame_number_past_the_last_makes_a_new_frame_and_zero_does_too() {
+    // kitty (`handle_animation_frame_load_command`): not an error, a new frame.
+    let mut r = rig(20, 5);
+    let image = picture(&mut r);
+    r.feed(&apc("a=f,f=24,i=1,r=9,q=2", &rgb(4, 2)));
+    r.feed(&apc("a=f,f=24,i=1,r=3,q=2", &rgb(4, 2)));
+    r.feed(&apc("a=f,f=24,i=1,r=0,q=2", &rgb(4, 2)));
+    let up = frame_uploads(&mut r);
+    assert_eq!(
+        up.iter().map(|u| (u.frame, u.created)).collect::<Vec<_>>(),
+        [(2, true), (3, true), (4, true)]
+    );
     assert_eq!(plan(&r, image).frame_count(), 4);
 }
 
@@ -312,7 +335,7 @@ fn the_animation_is_controlled_with_state_loops_current_frame_and_gaps() {
     }
     let g0 = plan(&r, image).generation();
     r.feed(&apc_bare("a=a,i=1,s=3,v=3,c=2,r=1,z=30"));
-    assert_eq!(r.replies(), "\x1b_Gi=1;OK\x1b\\");
+    assert_eq!(r.replies(), "", "kitty does not answer a successful a=a");
     let a = plan(&r, image);
     assert_eq!((a.state(), a.loops(), a.current()), (AnimationState::Running, Loops::Passes(2), 1));
     assert_eq!(a.gaps(), [Gap::Millis(30), Gap::Millis(10), Gap::Millis(20), Gap::Gapless]);
@@ -349,30 +372,33 @@ fn z_zero_changes_no_gap_and_a_negative_z_makes_one_gapless() {
 }
 
 #[test]
-fn a_control_that_is_refused_changes_nothing() {
+fn a_control_skips_what_names_nothing_and_does_the_rest() {
+    // kitty (`handle_animation_control_command`): a frame that is not there for `r` or `c` and a
+    // state that is not 1, 2 or 3 are skipped without an error; the other keys still count.
     let mut r = rig(20, 5);
     let image = picture(&mut r);
     let before = plan(&r, image);
-    for (keys, code) in [
-        ("a=a,i=1,c=2", "ENOENT"),
-        ("a=a,i=1,r=2,z=5", "ENOENT"),
-        ("a=a,i=1,s=7", "EINVAL"),
-        ("a=a,i=9,s=3", "ENOENT"),
-        ("a=a,i=1,I=1,s=3", "EINVAL"),
-    ] {
+    for keys in ["a=a,i=1,c=2", "a=a,i=1,r=2,z=5", "a=a,i=1,s=7", "a=a,i=1,c=4294967295,r=4294967295,z=1"] {
         r.feed(&apc_bare(keys));
-        let reply = r.replies();
-        assert!(reply.contains(code), "{keys}: {reply:?}");
-        assert_eq!(plan(&r, image), before, "{keys}");
+        assert_eq!(r.replies(), "", "{keys}");
+        assert_eq!(plan(&r, image).gaps(), before.gaps(), "{keys}");
+        assert_eq!(plan(&r, image).state(), before.state(), "{keys}");
     }
+    r.feed(&apc_bare("a=a,i=1,c=2,s=3,v=4"));
+    let a = plan(&r, image);
+    assert_eq!((a.state(), a.loops(), a.current()), (AnimationState::Running, Loops::Passes(3), 0));
+    // A picture that is not there is the one error.
+    r.feed(&apc_bare("a=a,i=9,s=3"));
+    assert!(r.replies().contains("ENOENT"));
+    r.feed(&apc_bare("a=a,i=1,I=1,s=3"));
+    assert!(r.replies().contains("EINVAL"));
     // Without an id or number there is nothing to answer, and no picture to change.
     r.feed(&apc_bare("a=a,s=3"));
     assert_eq!(r.replies(), "");
-    assert_eq!(plan(&r, image), before);
-    // A numbered picture is told its id.
+    // A numbered picture is changed too, and not answered.
     r.feed(&apc("a=t,f=24,s=4,v=2,I=5,q=2", &rgb(4, 2)));
     r.feed(&apc_bare("a=a,I=5,s=3"));
-    assert_eq!(r.replies(), "\x1b_Gi=2,I=5;OK\x1b\\");
+    assert_eq!(r.replies(), "");
 }
 
 #[test]
@@ -459,43 +485,99 @@ fn a_composition_names_what_is_wrong_with_it() {
 // ---- deleting frames ----
 
 #[test]
-fn deleting_frames_keeps_the_picture_and_gives_back_the_budget() {
+fn deleting_a_frame_takes_one_frame_and_gives_back_its_budget() {
+    // kitty (`handle_delete_frame_command`): the frame is `r`, 0 is the first, past the last is the last.
     let mut r = limited(96);
     let image = picture(&mut r);
-    for _ in 0..2 {
-        r.feed(&apc("a=f,f=24,i=1,q=2", &rgb(4, 2)));
+    for z in [10, 20] {
+        r.feed(&apc(&format!("a=f,f=24,i=1,z={z},q=2"), &rgb(4, 2)));
     }
-    r.feed(&apc_bare("a=a,i=1,s=3,c=3,q=2"));
+    r.feed(&apc_bare("a=a,i=1,s=3,c=3,r=1,z=5,q=2"));
     r.events();
-    r.feed(&apc_bare("a=d,d=f,i=1"));
+    r.feed(&apc_bare("a=d,d=f,i=1,r=2"));
     assert_eq!(r.replies(), "\x1b_Gi=1;OK\x1b\\");
     let a = plan(&r, image);
-    assert_eq!((a.frame_count(), a.state(), a.current()), (1, AnimationState::Stopped, 0));
+    assert_eq!(
+        (a.gaps(), a.current(), a.state()),
+        (&[Gap::Millis(5), Gap::Millis(20)][..], 1, AnimationState::Running)
+    );
     let events = r.events();
-    assert!(events.contains(&Event::ImageFramesCleared(image)));
+    assert!(events.contains(&Event::ImageFrameDeleted { image, frame: 2 }));
     assert!(!events.iter().any(|e| matches!(e, Event::ImageFree(_))));
+    // The root frame can go, and the picture is what was the second frame.
+    r.feed(&apc_bare("a=d,d=f,i=1"));
+    assert_eq!(plan(&r, image).gaps(), &[Gap::Millis(20)][..]);
+    assert!(r.events().contains(&Event::ImageFrameDeleted { image, frame: 1 }));
+    r.replies(); // the answers to the two deletes
+    // Room for two frames again.
     for _ in 0..2 {
         r.feed(&apc("a=f,f=24,i=1", &rgb(4, 2)));
         assert_eq!(r.replies(), "\x1b_Gi=1;OK\x1b\\");
     }
+    r.feed(&apc_bare("a=d,d=f,i=1,r=99"));
+    assert_eq!(plan(&r, image).frame_count(), 2, "past the last is the last");
+    assert!(r.events().contains(&Event::ImageFrameDeleted { image, frame: 3 }));
 }
 
 #[test]
-fn deleting_frames_without_a_name_takes_them_from_the_pictures_on_screen_and_a_capital_frees_the_rest() {
+fn deleting_a_frame_needs_a_picture_and_the_last_frame_stays_unless_the_capital_is_used() {
     let mut r = rig(20, 5);
     let a = picture(&mut r);
-    r.feed(&apc("a=f,f=24,i=1,q=2", &rgb(4, 2)));
     r.feed(&apc("a=T,f=24,s=4,v=2,i=2,q=2", &rgb(4, 2)));
-    let b = uploads(&mut r)[0].image;
-    r.feed(&apc("a=f,f=24,i=2,q=2", &rgb(4, 2)));
     r.events();
     r.feed(&apc_bare("a=d,d=f"));
-    assert_eq!(plan(&r, a).frame_count(), 2, "not placed");
-    assert_eq!(plan(&r, b).frame_count(), 1);
-    // The capital also frees an unplaced picture, as the other capitals do.
+    assert!(
+        r.replies().is_empty() || r.replies().contains("EINVAL"),
+        "a delete without i or I names no picture"
+    );
+    assert!(r.events().is_empty());
+    r.feed(&apc_bare("a=d,d=f,i=1"));
+    assert!(r.term.animation(a).is_some(), "the only frame stays");
+    assert!(freed(&mut r).is_empty());
+    // F on a picture with one frame deletes the whole picture, as kitty does, placed or not.
+    r.feed(&apc_bare("a=d,d=F,i=2"));
+    assert_eq!(freed(&mut r).len(), 1);
+    assert!(spots(&r).is_empty());
     r.feed(&apc_bare("a=d,d=F,i=1"));
     assert_eq!(freed(&mut r), [a]);
     assert!(r.term.animation(a).is_none());
+    // A capital on a picture with frames deletes the frame and frees nothing else.
+    r.feed(&apc("a=t,f=24,s=4,v=2,i=3,q=2", &rgb(4, 2)));
+    r.feed(&apc("a=f,f=24,i=3,q=2", &rgb(4, 2)));
+    r.events();
+    r.feed(&apc_bare("a=d,d=F,i=3"));
+    assert!(freed(&mut r).is_empty());
+}
+
+#[test]
+fn a_plan_of_thousands_of_gapless_frames_and_one_that_takes_time_costs_no_scan_per_step() {
+    // 4095 gapless frames and a root frame of 1 ms: a pass is 1 ms. `tick` reads the cached length of a
+    // pass, so stepping through all frames is 4096 constant-time steps, and a host that was away for
+    // ten seconds skips ten thousand passes at once instead of stepping through them.
+    let mut r = rig(20, 5);
+    let image = picture(&mut r);
+    for _ in 1..MAX_FRAMES {
+        r.feed(&apc("a=f,f=24,s=1,v=1,z=-1,i=1,q=2", &rgb(1, 1)));
+        if r.term.animation(image).is_some_and(|a| a.frame_count() % 1000 == 0) {
+            r.events();
+        }
+    }
+    r.feed(&apc_bare("a=a,i=1,r=1,z=1,s=3,q=2"));
+    let a = plan(&r, image);
+    assert_eq!(a.frame_count(), MAX_FRAMES);
+    assert_eq!(a.pass_duration(), Duration::from_millis(1));
+    let mut at = Position { frame: 0, pass: 0 };
+    let mut steps = 0;
+    while let Tick::After { next, .. } = a.tick(at) {
+        steps += 1;
+        at = next;
+        if at.pass == 1 {
+            break;
+        }
+    }
+    assert_eq!((steps, at), (MAX_FRAMES, Position { frame: 0, pass: 1 }));
+    let skipped = a.skip_passes(Position { frame: 0, pass: 0 }, Duration::from_secs(10));
+    assert_eq!((skipped.position.pass, skipped.lag), (10_000, Duration::ZERO));
 }
 
 // ---- the whole thing stays sound ----

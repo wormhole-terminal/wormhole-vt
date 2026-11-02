@@ -3,7 +3,9 @@
 //! Spec: kitty, "Controlling animations". `c` makes a frame current, `s` starts or stops (1 stop,
 //! 2 run but wait for frames, 3 run), `v` sets the loops (0 is ignored, 1 forever, `n` is `n - 1`
 //! passes), and `r` with `z` sets the gap of frame `r` (`z=0` is ignored, negative is gapless).
-//! A missing picture or frame is `ENOENT`; a state that is not 1, 2 or 3 is `EINVAL`.
+//! A missing picture is `ENOENT`. kitty ignores, without an error, a frame that does not exist and
+//! a state that is not 1, 2 or 3 (`handle_animation_control_command` in its `graphics.c`) and does
+//! not answer a successful command at all, and this does the same.
 
 use crate::terminal::Terminal;
 use crate::terminal::graphics::command::Command;
@@ -32,30 +34,23 @@ impl Terminal {
     }
 
     pub(in crate::terminal::graphics) fn kitty_animate(&mut self, command: &Command) -> Result<Flow, Error> {
-        let (slot, index, assigned) = self.animated_image(command)?;
+        let (slot, index, _) = self.animated_image(command)?;
         let image = self.graphics.tables[slot].get(index).ok_or(Error::NotFound)?;
         let (handle, frames) = (image.handle, image.animation.frame_count());
-        // Everything is checked before anything changes: a refused command does nothing.
+        // A key that names nothing is skipped, as kitty skips it (`handle_animation_control_command`
+        // in its `graphics.c`): a frame that does not exist for `r` or `c`, a state that is not 1, 2
+        // or 3. The rest of the command is still done.
         let state = match command.width {
-            0 => None,
             1 => Some(AnimationState::Stopped),
             2 => Some(AnimationState::Loading),
             3 => Some(AnimationState::Running),
-            _ => return Err(Error::Invalid("a state the protocol does not have")),
+            _ => None,
         };
-        let current = match command.cols {
-            0 => None,
-            n if n as usize <= frames => Some(n as usize - 1),
-            _ => return Err(Error::NotFound),
-        };
-        let gap = match (command.rows, command.z) {
-            (_, 0) | (0, _) => None,
-            (n, _) if n as usize > frames => return Err(Error::NotFound),
-            (n, z) => Some((n as usize - 1, Gap::from_z(z))),
-        };
-        if command.rows as usize > frames {
-            return Err(Error::NotFound);
-        }
+        let current = (command.cols as usize).checked_sub(1).filter(|&frame| frame < frames);
+        let gap = (command.rows as usize)
+            .checked_sub(1)
+            .filter(|&frame| frame < frames && command.z != 0)
+            .map(|frame| (frame, Gap::from_z(command.z)));
         let loops = match command.height {
             0 => None,
             1 => Some(Loops::Infinite),
@@ -82,6 +77,6 @@ impl Terminal {
             animation.set_state(state);
         }
         self.animation_changed(handle);
-        Ok(Flow::Done { assigned })
+        Ok(Flow::Silent)
     }
 }

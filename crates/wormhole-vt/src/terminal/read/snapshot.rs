@@ -182,13 +182,10 @@ impl Terminal {
     /// to show and how it is sized; see [`ImagePlacement`]. Cheap: no allocation once `out` has
     /// grown, and nothing at all while no picture is placed.
     ///
-    /// A placement relative to a virtual placement (kitty's `P`, `Q`) is positioned from the
-    /// placeholder cells in view, which costs a read of the view's rows (and an allocation) while
-    /// there is one.
+    /// A placement relative to another (kitty's `P`, `Q`) is where its parent is; relative to a
+    /// virtual placement, where that one's placeholder cells in view start. Costs a pass over the
+    /// placements, with an allocation, while any placement is relative.
     pub fn placements(&self, out: &mut Vec<ImagePlacement>) {
-        if self.grid.has_virtual_children() {
-            return self.placements_with_placeholders(out);
-        }
         self.grid.copy_placements(out, self.cell_px);
     }
 

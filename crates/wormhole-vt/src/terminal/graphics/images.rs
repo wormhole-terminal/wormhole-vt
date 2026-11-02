@@ -31,6 +31,8 @@ pub(super) struct Image {
     /// Its frames' gaps and how it plays. Every frame is a canvas of the picture's size, so each
     /// one costs as much as the picture itself.
     pub animation: Animation,
+    /// How many frame uploads the picture has had, to tell the ones waiting for the host apart.
+    pub uploads: u32,
 }
 
 impl Image {
@@ -138,24 +140,15 @@ impl ImageTable {
         }
     }
 
-    /// Take the last frame off the picture at `index` again.
-    pub fn pop_frame(&mut self, index: usize) {
-        if let Some(image) = self.list.get_mut(index) {
-            let before = image.animation.frame_count();
-            image.animation.pop_frame();
-            self.bytes = self
-                .bytes
-                .saturating_sub(image.frame_cost() * (before - image.animation.frame_count()) as u64);
+    /// Delete frame `frame` (counted from 0) of the picture at `index`, its canvas's bytes with
+    /// it. False when it has no such frame or only one.
+    pub fn remove_frame(&mut self, index: usize, frame: usize) -> bool {
+        let Some(image) = self.list.get_mut(index) else { return false };
+        let removed = image.animation.remove_frame(frame);
+        if removed {
+            self.bytes = self.bytes.saturating_sub(image.frame_cost());
         }
-    }
-
-    /// Delete all frames but the root of the picture at `index`.
-    pub fn clear_frames(&mut self, index: usize) {
-        if let Some(image) = self.list.get_mut(index) {
-            let removed = image.animation.frame_count() - 1;
-            image.animation.clear_frames();
-            self.bytes = self.bytes.saturating_sub(image.frame_cost() * removed as u64);
-        }
+        removed
     }
 
     /// The least recently used picture that `keep` accepts, for making room without touching
@@ -232,6 +225,7 @@ mod tests {
             used: 0,
             virtuals: Vec::new(),
             animation: Animation::default(),
+            uploads: 0,
         }
     }
 
@@ -244,13 +238,12 @@ mod tests {
         table.push_frame(0, super::Gap::Millis(40));
         assert_eq!(table.check(10, 48), Ok(()), "three canvases of 16 bytes");
         assert!(table.check(10, 47).is_err());
-        table.pop_frame(0);
+        assert!(table.remove_frame(0, 1));
         assert_eq!(table.check(10, 32), Ok(()));
-        table.clear_frames(0);
+        assert!(table.remove_frame(0, 0), "the root frame can go while another is left");
         assert_eq!(table.check(10, 16), Ok(()));
-        table.pop_frame(0);
-        table.pop_frame(7);
-        assert_eq!(table.check(10, 16), Ok(()), "the root frame cannot be taken away");
+        assert!(!table.remove_frame(0, 0) && !table.remove_frame(7, 0));
+        assert_eq!(table.check(10, 16), Ok(()), "the last frame cannot be taken away");
         table.push_frame(0, super::Gap::Gapless);
         assert_eq!(table.remove(0).animation.frame_count(), 2);
         assert_eq!(table.check(10, 0), Ok(()), "a removed picture takes all its frames' bytes with it");

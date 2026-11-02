@@ -32,7 +32,7 @@ mod relative;
 mod shift;
 mod view;
 
-pub(crate) use relative::{Parent, Refused, Relative, VirtualOrigin};
+pub(crate) use relative::{Parent, PlaceholderKey, Refused, Relative};
 pub(crate) use view::Hit;
 
 /// Most placements a grid keeps. A program that places thousands loses the oldest, which are
@@ -91,6 +91,11 @@ pub(super) struct Placements {
     list: Vec<Placement>,
     /// The pictures of children deleted with their parents, until the terminal asks.
     orphaned: Vec<ImageHandle>,
+    /// Some placement may be relative to another. Set when one is made, made exact whenever the
+    /// orphans are looked for; while it is false the relative machinery does not run at all.
+    maybe_relative: bool,
+    /// How to read a placeholder cell, for the placements relative to a virtual placement.
+    placeholder_key: Option<PlaceholderKey>,
 }
 
 impl Placements {
@@ -189,13 +194,17 @@ impl Grid {
     ) -> usize {
         let (top, rows, cols) = (self.top_serial() as i64, self.rows, self.cols);
         let before = self.placements.list.len();
-        // Where each one is now, children included, before anything goes.
-        let hits: Vec<Hit> = (0..before)
-            .map(|i| view::hit(&self.placements.list[i], self.origin(i, &|_, _| None), top, rows, cols))
-            .collect();
-        let mut hits = hits.iter();
+        // Where each one is now, relatives included (those relative to placeholders by the ones on
+        // the screen), before anything goes. `None` while nothing is relative: the stored place.
+        let resolved = self.resolved(0, rows);
+        let mut index = 0;
         self.placements.list.retain(|p| {
-            let gone = hits.next().is_some_and(&mut pick);
+            let origin = match &resolved {
+                Some(all) => all.get(index).copied().flatten(),
+                None => Some((p.top, p.col as i64)),
+            };
+            index += 1;
+            let gone = pick(&view::hit(p, origin, top, rows, cols));
             if gone {
                 removed.push(p.spec.image);
             }
@@ -225,6 +234,7 @@ impl Grid {
     pub(crate) fn clear_placements(&mut self) {
         if !self.placements.is_empty() {
             self.placements.list.clear();
+            self.placements.maybe_relative = false;
             self.all_dirty = true;
         }
     }
@@ -250,19 +260,23 @@ impl Grid {
         let top = self.top_serial() as i64;
         let (first, last) = (top + ys.start as i64, top + ys.end as i64);
         let (xs_start, xs_end) = (xs.start as i64, xs.end as i64);
-        let erased: Vec<bool> = (0..self.placements.list.len())
-            .map(|i| {
-                let p = &self.placements.list[i];
-                let Some((top, col)) = self.origin(i, &|_, _| None) else { return false };
-                top < last
-                    && top.saturating_add(p.spec.rows as i64) > first
-                    && col < xs_end
-                    && col.saturating_add(p.spec.cols as i64) > xs_start
-            })
-            .collect();
-        let mut erased = erased.iter();
+        // The relatives are where they are because of their parents (and placeholders), which the
+        // erase has not touched yet. Nothing relative: the stored places, and no allocation.
+        let resolved = self.resolved(0, self.rows);
+        let mut index = 0;
         let before = self.placements.list.len();
-        self.placements.list.retain(|_| !erased.next().copied().unwrap_or(false));
+        self.placements.list.retain(|p| {
+            let origin = match &resolved {
+                Some(all) => all.get(index).copied().flatten(),
+                None => Some((p.top, p.col as i64)),
+            };
+            index += 1;
+            let Some((p_top, p_col)) = origin else { return true };
+            !(p_top < last
+                && p_top.saturating_add(p.spec.rows as i64) > first
+                && p_col < xs_end
+                && p_col.saturating_add(p.spec.cols as i64) > xs_start)
+        });
         if self.placements.list.len() != before {
             self.drop_orphans();
             self.all_dirty = true;
@@ -284,6 +298,7 @@ impl Grid {
     /// The rows from `end` on were cut off the grid: placements below go, the others are cut.
     pub(super) fn cut_placements_at(&mut self, end: u64) {
         let end = end as i64;
+        let before = self.placements.list.len();
         self.placements.list.retain_mut(|p| {
             if p.rel.is_some() {
                 return true;
@@ -301,14 +316,19 @@ impl Grid {
             }
             true
         });
-        self.drop_orphans();
+        if self.placements.list.len() != before {
+            self.drop_orphans();
+        }
     }
 
     /// After a reflow carried the anchors: placements whose left edge no longer fits are gone.
     pub(super) fn drop_placements_off_screen(&mut self) {
         let cols = self.cols;
+        let before = self.placements.list.len();
         self.placements.list.retain(|p| p.rel.is_some() || p.col < cols);
-        self.drop_orphans();
+        if self.placements.list.len() != before {
+            self.drop_orphans();
+        }
     }
 }
 

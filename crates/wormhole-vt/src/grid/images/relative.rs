@@ -8,20 +8,30 @@
 //! # Rules
 //!
 //! - A child's own `top` and `col` mean nothing. Where it is gets worked out when it is read
-//!   ([`Grid::origin`]), from the parent's, up a chain of at most [`MAX_DEPTH`] parents, so
-//!   whatever moves a parent (a scroll, a reflow, a new placement) moves its children, and
-//!   nothing else moves a child. The scroll, reflow and cut-off code skips children for that
-//!   reason.
-//! - A parent may be a virtual placement of Unicode placeholders. Its position is then the
-//!   top left of the placeholder cells in view, which the grid cannot read (it is below the
-//!   layer that knows what a placeholder is): the terminal hands it in as a [`VirtualOrigin`].
-//!   A child whose parent has none is not shown.
+//!   ([`Grid::origins`], one pass for all placements, memoized), from the parent's, up a chain of
+//!   at most [`MAX_DEPTH`] parents, so whatever moves a parent (a scroll, a reflow, a new
+//!   placement) moves its children, and nothing else moves a child. The scroll, reflow and
+//!   cut-off code skips children for that reason.
+//! - A parent may be a virtual placement of Unicode placeholders. Its position is then the top
+//!   left of the placeholder cells on the screen (or, to draw, in view). The grid is below the
+//!   layer that knows what a placeholder is, so the terminal gives it a function that reads one
+//!   ([`PlaceholderKey`]); without it, or without a placeholder in range, the child is not shown.
 //! - A child cut off at the left edge (a negative column) is not shown: a placement has no
 //!   column to the left of the screen. One below or above the view is not shown either.
-//! - Deleting a parent deletes its children, and theirs ([`Grid::drop_orphans`]). The pictures
-//!   that lost their last placement that way are handed back ([`Grid::take_orphaned`]).
+//! - Deleting a parent deletes its children, and theirs ([`Grid::drop_orphans`], a worklist over
+//!   the whole table, not a search per child). The pictures that lost their last placement that
+//!   way are handed back ([`Grid::take_orphaned`]).
+//! - A chain is at most [`MAX_DEPTH`] parents deep **counting what hangs below the placement
+//!   being made**: re-placing the root of one chain under the tail of another cannot make the
+//!   first longer than the limit ([`Grid::check_relative`]).
+//! - Cost: while no placement is relative (`Placements::maybe_relative`) nothing here runs and
+//!   nothing is allocated, so scrolling and erasing cost what they did before relative placements
+//!   existed. With some, a pass costs one hash map of the table and a few vectors of its size,
+//!   once per scroll, erase, delete or frame, never one search per placement.
 
-use crate::types::ImageHandle;
+use std::collections::HashMap;
+
+use crate::types::{Cell, CellExtra, ImageHandle, Line, RowExtras};
 
 use super::{Grid, Placement, Placements};
 
@@ -49,82 +59,103 @@ pub(crate) struct Relative {
     pub dy: i32,
 }
 
-/// Where a virtual placement's placeholders start: a line counted from the live screen's top
-/// row (negative in the history) and a column. Asked with the picture's id and the placement id.
-pub(crate) type VirtualOrigin<'a> = &'a dyn Fn(u32, u32) -> Option<(i64, i64)>;
+/// Reads a placeholder cell: the picture id and the placement id it names. Given by the
+/// terminal, which knows what a placeholder is.
+pub(crate) type PlaceholderKey = fn(&Cell, CellExtra<'_>) -> Option<(u32, u32)>;
+
+/// Where the placeholders of each virtual parent start: (picture id, placement id), then a line
+/// counted from the live screen's top row (negative in the history) and a column.
+type VirtualOrigins = Vec<((u32, u32), (i64, i64))>;
+
+/// What a placement is named by to its children.
+type Key = (ImageHandle, u32);
 
 /// Why a relative placement cannot be made.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Refused {
     /// It would be its own ancestor.
     Cycle,
-    /// More than [`MAX_DEPTH`] parents.
+    /// More than [`MAX_DEPTH`] parents above it or above something that hangs on it.
     TooDeep,
 }
 
 impl Placements {
+    /// The newest placement of each name.
+    fn index(&self) -> HashMap<Key, usize> {
+        let mut index = HashMap::with_capacity(self.list.len());
+        for (i, p) in self.list.iter().enumerate() {
+            index.insert((p.spec.image, p.spec.id), i);
+        }
+        index
+    }
+
     /// The newest placement of `image` with this id.
     fn find(&self, image: ImageHandle, id: u32) -> Option<usize> {
         self.list.iter().rposition(|p| p.spec.image == image && p.spec.id == id)
     }
 
-    /// Whether any placement is relative to a placeholder: the terminal has work to do reading
-    /// them.
-    pub(super) fn has_virtual_children(&self) -> bool {
-        self.list.iter().any(|p| matches!(p.rel, Some(Relative { parent: Parent::Virtual { .. }, .. })))
+    /// How many levels hang below the placement `key` (0: nothing does), at most
+    /// `MAX_DEPTH + 1`: a level at a time over the table.
+    fn levels_below(&self, key: Key) -> usize {
+        let mut frontier = vec![key];
+        let mut levels = 0;
+        while levels <= MAX_DEPTH {
+            let next: Vec<Key> = self
+                .list
+                .iter()
+                .filter(|p| matches!(p.rel, Some(Relative { parent: Parent::Placement { image, id }, .. }) if frontier.contains(&(image, id))))
+                .map(|p| (p.spec.image, p.spec.id))
+                .collect();
+            if next.is_empty() {
+                break;
+            }
+            levels += 1;
+            frontier = next;
+        }
+        levels
     }
 }
 
 impl Grid {
+    /// Let the grid read placeholders, so that a placement relative to a virtual one can be
+    /// found wherever its position is asked for (drawing, deleting, erasing).
+    pub(crate) fn set_placeholder_key(&mut self, key: PlaceholderKey) {
+        self.placements.placeholder_key = Some(key);
+    }
+
     /// Whether the picture has a placement with this id (0: one without an id).
     pub(crate) fn has_placement(&self, image: ImageHandle, id: u32) -> bool {
         self.placements.find(image, id).is_some()
     }
 
-    /// How far the view is scrolled up into the history, in rows.
-    pub(crate) fn view_offset(&self) -> usize {
-        self.offset
-    }
-
-    /// The (picture id, placement id) of each virtual placement something is relative to.
-    pub(crate) fn virtual_parents(&self) -> Vec<(u32, u32)> {
-        let mut out: Vec<(u32, u32)> = Vec::new();
-        for p in &self.placements.list {
-            if let Some(Relative { parent: Parent::Virtual { image_id, id }, .. }) = p.rel
-                && !out.contains(&(image_id, id))
-            {
-                out.push((image_id, id));
-            }
-        }
-        out
-    }
-
-    /// Whether anything is placed relative to a virtual placement.
-    pub(crate) fn has_virtual_children(&self) -> bool {
-        self.placements.has_virtual_children()
-    }
-
     /// Whether a placement of `image` with id `id` may hang on `parent`: it must not be its own
-    /// ancestor, and have no more than [`MAX_DEPTH`] ancestors. The parent has to exist
+    /// ancestor, and neither it nor anything that hangs on it (children placed under its name
+    /// earlier) may end up more than [`MAX_DEPTH`] parents below a root. The parent has to exist
     /// already (a virtual one is never relative itself, and the terminal knows it).
     pub(crate) fn check_relative(&self, image: ImageHandle, id: u32, parent: Parent) -> Result<(), Refused> {
+        let index = if self.placements.maybe_relative { self.placements.index() } else { HashMap::new() };
         let mut at = parent;
-        let mut depth = 0;
-        loop {
-            let Parent::Placement { image: at_image, id: at_id } = at else { return Ok(()) };
+        let mut above = 0;
+        while let Parent::Placement { image: at_image, id: at_id } = at {
             if (at_image, at_id) == (image, id) {
                 return Err(Refused::Cycle);
             }
-            depth += 1;
-            if depth > MAX_DEPTH {
+            above += 1;
+            if above > MAX_DEPTH {
                 return Err(Refused::TooDeep);
             }
-            let Some(next) = self.placements.find(at_image, at_id).and_then(|i| self.placements.list[i].rel)
-            else {
-                return Ok(());
+            let Some(next) = index.get(&(at_image, at_id)).and_then(|&i| self.placements.list[i].rel) else {
+                break;
             };
             at = next.parent;
         }
+        // What already hangs on this name moves down with it: the deepest of it counts too.
+        let below =
+            if self.placements.maybe_relative { self.placements.levels_below((image, id)) } else { 0 };
+        if above + below > MAX_DEPTH {
+            return Err(Refused::TooDeep);
+        }
+        Ok(())
     }
 
     /// Place a picture relative to a parent. Everything about `new` is as for
@@ -145,74 +176,178 @@ impl Grid {
             col: 0,
             rel: Some(rel),
         });
+        self.placements.maybe_relative = true;
         self.drop_orphans();
         self.all_dirty = true;
     }
 
-    /// Where placement `index` starts: the serial number of its top row, and its column. For a
-    /// child, worked out from its parents. `None`: not shown (no parent found, a virtual parent
-    /// without placeholders in view, or a chain that is too long).
-    pub(super) fn origin(&self, index: usize, virtual_origin: VirtualOrigin<'_>) -> Option<(i64, i64)> {
-        let top_serial = self.top_serial() as i64;
-        let (mut dx, mut dy) = (0i64, 0i64);
-        let mut at = self.placements.list.get(index)?;
-        for _ in 0..=MAX_DEPTH + 1 {
-            let Some(rel) = at.rel else {
-                return Some((at.top.saturating_add(dy), (at.col as i64).saturating_add(dx)));
-            };
-            dx = dx.saturating_add(i64::from(rel.dx));
-            dy = dy.saturating_add(i64::from(rel.dy));
-            match rel.parent {
-                Parent::Placement { image, id } => {
-                    at = self.placements.list.get(self.placements.find(image, id)?)?
+    /// Where the placeholders of each virtual parent start, among the `rows` lines from `first`
+    /// (0 is the live screen's top row). Empty without a reader or a virtual parent.
+    fn virtual_origins(&self, first: i64, rows: usize) -> VirtualOrigins {
+        let Some(key_of) = self.placements.placeholder_key else { return Vec::new() };
+        let mut wanted: Vec<(u32, u32)> = Vec::new();
+        for p in &self.placements.list {
+            if let Some(Relative { parent: Parent::Virtual { image_id, id }, .. }) = p.rel
+                && !wanted.contains(&(image_id, id))
+            {
+                wanted.push((image_id, id));
+            }
+        }
+        if wanted.is_empty() {
+            return Vec::new();
+        }
+        let mut found: VirtualOrigins = Vec::new();
+        let (mut cells, mut extras): (Vec<Cell>, RowExtras) = (Vec::new(), RowExtras::default());
+        for line in first..first.saturating_add(rows as i64) {
+            let line = Line(line.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32);
+            self.copy_row(line, &mut cells, Some(&mut extras));
+            for (col, cell) in cells.iter().enumerate() {
+                let Some(key) = key_of(cell, extras.cell(col)) else { continue };
+                if !wanted.contains(&key) {
+                    continue;
                 }
-                Parent::Virtual { image_id, id } => {
-                    let (line, col) = virtual_origin(image_id, id)?;
-                    return Some((
-                        top_serial.saturating_add(line).saturating_add(dy),
-                        col.saturating_add(dx),
-                    ));
+                let at = (i64::from(line.0), col as i64);
+                match found.iter_mut().find(|(k, _)| *k == key) {
+                    // The top left of all of them: the least line, and the least column.
+                    Some((_, min)) => *min = (min.0.min(at.0), min.1.min(at.1)),
+                    None => found.push((key, at)),
                 }
             }
         }
-        None
+        found
     }
 
-    /// Delete the children whose parent is gone, and theirs. Returns whether any went. The
-    /// pictures of those placements are noted for [`take_orphaned`](Self::take_orphaned).
-    pub(super) fn drop_orphans(&mut self) -> bool {
-        let mut any = false;
-        loop {
-            let list = &self.placements.list;
-            let gone: Vec<bool> = list
-                .iter()
-                .map(|p| match p.rel {
-                    Some(Relative { parent: Parent::Placement { image, id }, .. }) => {
-                        self.placements.find(image, id).is_none()
-                    }
-                    _ => false,
-                })
-                .collect();
-            if !gone.contains(&true) {
-                return any;
+    /// Where every placement starts, in one pass over the table, each worked out once: the serial
+    /// number of its top row and its column, or `None` when it is not shown (its parent is gone,
+    /// a virtual parent has no placeholders in range, or the chain is longer than allowed).
+    /// `virtual_origins` say where the placeholders are. Only for a table with relatives.
+    fn origins(&self, virtual_origins: &VirtualOrigins) -> Vec<Option<(i64, i64)>> {
+        let list = &self.placements.list;
+        let top_serial = self.top_serial() as i64;
+        let index = self.placements.index();
+        let mut out: Vec<Option<(i64, i64)>> = vec![None; list.len()];
+        let mut done = vec![false; list.len()];
+        let mut chain: Vec<usize> = Vec::with_capacity(MAX_DEPTH + 1);
+        for start in 0..list.len() {
+            if done[start] {
+                continue;
             }
-            any = true;
-            let mut flags = gone.iter();
-            let orphaned = &mut self.placements.orphaned;
-            self.placements.list.retain(|p| {
-                let go = flags.next().copied().unwrap_or(false);
-                if go {
-                    orphaned.push(p.spec.image);
+            chain.clear();
+            let mut at = start;
+            // Up the parents until something known: a root, a virtual parent, a node done already.
+            let mut base = loop {
+                if done[at] {
+                    break out[at];
                 }
-                !go
-            });
+                let p = &list[at];
+                let Some(rel) = p.rel else {
+                    out[at] = Some((p.top, p.col as i64));
+                    done[at] = true;
+                    break out[at];
+                };
+                chain.push(at);
+                if chain.len() > MAX_DEPTH {
+                    break None;
+                }
+                match rel.parent {
+                    Parent::Placement { image, id } => match index.get(&(image, id)) {
+                        Some(&parent) => at = parent,
+                        None => break None,
+                    },
+                    Parent::Virtual { image_id, id } => {
+                        break virtual_origins
+                            .iter()
+                            .find(|(k, _)| *k == (image_id, id))
+                            .map(|(_, (line, col))| (top_serial.saturating_add(*line), *col));
+                    }
+                }
+            };
+            // And back down, adding each one's offset.
+            for &node in chain.iter().rev() {
+                if let Some(rel) = list[node].rel {
+                    base = base.map(|(line, col)| {
+                        (line.saturating_add(i64::from(rel.dy)), col.saturating_add(i64::from(rel.dx)))
+                    });
+                }
+                out[node] = base;
+                done[node] = true;
+            }
+        }
+        out
+    }
+
+    /// Where every placement starts as [`origins`](Self::origins) says, for a table that has
+    /// relatives, and `None` (use the stored position) for one that has none: the common case
+    /// allocates nothing. `first` and `rows` are the lines placeholders are looked for in.
+    pub(super) fn resolved(&self, first: i64, rows: usize) -> Option<Vec<Option<(i64, i64)>>> {
+        self.placements.maybe_relative.then(|| self.origins(&self.virtual_origins(first, rows)))
+    }
+
+    /// Delete the children whose parent is gone, and theirs, with a worklist: a placement leaves
+    /// once, and the children of a name leave when its last placement does. Returns whether any
+    /// went. The pictures of those placements are noted for [`take_orphaned`](Self::take_orphaned).
+    /// Nothing runs while no placement is relative.
+    pub(super) fn drop_orphans(&mut self) -> bool {
+        if !self.placements.maybe_relative {
+            return false;
+        }
+        let list = &self.placements.list;
+        // How many placements carry each name, and who hangs on each name: a chain of indexes
+        // through `next_child` from `first_child`, so that this makes a fixed number of vectors
+        // whatever the number of parents is.
+        let mut alive_by_name: HashMap<Key, usize> = HashMap::with_capacity(list.len());
+        let mut first_child: HashMap<Key, usize> = HashMap::with_capacity(list.len());
+        let mut next_child = vec![usize::MAX; list.len()];
+        for (i, p) in list.iter().enumerate() {
+            *alive_by_name.entry((p.spec.image, p.spec.id)).or_insert(0) += 1;
+            if let Some(Relative { parent: Parent::Placement { image, id }, .. }) = p.rel {
+                next_child[i] = first_child.insert((image, id), i).unwrap_or(usize::MAX);
+            }
+        }
+        let mut gone = vec![false; list.len()];
+        let mut work: Vec<usize> = Vec::new();
+        let push_children = |name: &Key, work: &mut Vec<usize>| {
+            let mut at = first_child.get(name).copied().unwrap_or(usize::MAX);
+            while at != usize::MAX {
+                work.push(at);
+                at = next_child[at];
+            }
+        };
+        for name in first_child.keys().filter(|name| !alive_by_name.contains_key(*name)) {
+            push_children(name, &mut work);
+        }
+        let mut any = false;
+        while let Some(i) = work.pop() {
+            if gone[i] {
+                continue;
+            }
+            gone[i] = true;
+            any = true;
+            let name = (list[i].spec.image, list[i].spec.id);
+            self.placements.orphaned.push(list[i].spec.image);
+            if let Some(count) = alive_by_name.get_mut(&name) {
+                *count -= 1;
+                if *count == 0 {
+                    push_children(&name, &mut work);
+                }
+            }
+        }
+        if any {
+            let mut flags = gone.iter();
+            self.placements.list.retain(|_| !flags.next().copied().unwrap_or(false));
             self.all_dirty = true;
         }
+        // The flag is only a "maybe": this pass looked at everything, so make it exact.
+        self.placements.maybe_relative = self.placements.list.iter().any(|p| p.rel.is_some());
+        any
     }
 
     /// The placements relative to a virtual placement of the picture with `image_id` are gone,
     /// because it was (`only` is its placement id) or all of that picture's were.
     pub(crate) fn drop_virtual_children(&mut self, image_id: u32, only: Option<u32>) {
+        if !self.placements.maybe_relative {
+            return;
+        }
         let orphaned = &mut self.placements.orphaned;
         let before = self.placements.list.len();
         self.placements.list.retain(|p| {

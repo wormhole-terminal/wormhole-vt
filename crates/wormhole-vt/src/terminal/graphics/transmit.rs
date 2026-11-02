@@ -26,6 +26,9 @@ pub const MAX_PIXELS: u64 = 16 * 1024 * 1024;
 pub(super) enum Flow {
     /// Answer now. `assigned` is the id the terminal gave a numbered picture.
     Done { assigned: Option<u32> },
+    /// Answer nothing: kitty sends no reply to a successful `a=a`, and a stray one would be
+    /// input to a program that never asked for it.
+    Silent,
     /// Answer when the host has decoded this picture.
     Waiting { image: ImageHandle, assigned: Option<u32> },
 }
@@ -99,6 +102,7 @@ impl Terminal {
                 let target = assigned.map_or(target, |id| target.with_id(id));
                 self.answer(target.render(Ok(())));
             }
+            Ok(Flow::Silent) => {}
             Ok(Flow::Waiting { image, assigned }) => {
                 let target = assigned.map_or(target, |id| target.with_id(id));
                 let rules = self.reply_rules();
@@ -258,6 +262,7 @@ impl Terminal {
             used: 0,
             virtuals: Vec::new(),
             animation: Default::default(),
+            uploads: 0,
         });
         Ok((handle, assigned))
     }
