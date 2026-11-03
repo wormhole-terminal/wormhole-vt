@@ -99,7 +99,7 @@ pub use copy::ViewRow;
 pub use graphemes::MAX_MARKS;
 #[cfg(test)]
 pub use images::MAX_PLACEMENTS;
-pub(crate) use images::NewPlacement;
+pub(crate) use images::{NewPlacement, Parent, Refused, Relative};
 pub use links::LinkSpan;
 pub use pen::Pen;
 pub use pins::Pin;

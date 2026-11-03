@@ -23,8 +23,12 @@ pub(super) enum Action {
     Delete,
     /// `q`: ask whether this would work, without storing anything.
     Query,
-    /// `f`, `a`, `c`: animation frames, their control and composition (not supported).
-    Animation,
+    /// `f`: transmit the data of an animation frame (see [`animation`](super::animation)).
+    Frame,
+    /// `a`: control an animation: its state, loops, current frame and the frames' gaps.
+    Animate,
+    /// `c`: compose a rectangle of one frame onto another.
+    Compose,
 }
 
 /// `t`: where the data comes from.
@@ -59,7 +63,7 @@ pub(super) enum Selector {
     ByNumber,
     /// `c`: those that cover the cursor's cell.
     AtCursor,
-    /// `f`: animation frames (none here).
+    /// `f`: the animation frames of a picture (all but the root frame).
     Frames,
     /// `p`: those that cover the cell `x`, `y`.
     AtCell,
@@ -114,8 +118,13 @@ pub(super) struct Command {
     pub cursor_stays: bool,
     /// `U=1`: a virtual placement.
     pub unicode_placeholder: bool,
-    /// `P`, `Q`, `H`, `V`: a placement relative to another (any of them given).
-    pub relative: bool,
+    /// `P`: the id of the picture whose placement this one is relative to, 0 for not relative.
+    pub parent_image: u32,
+    /// `Q`: the id of the parent placement, 0 for the one without an id.
+    pub parent_placement: u32,
+    /// `H`, `V`: cells right and down from the parent's top left cell (negative: left and up).
+    pub offset_h: i32,
+    pub offset_v: i32,
     /// `d`, with the case saying whether to free the picture's data too.
     pub selector: Selector,
     pub free: bool,
@@ -146,7 +155,10 @@ impl Default for Command {
             z: 0,
             cursor_stays: false,
             unicode_placeholder: false,
-            relative: false,
+            parent_image: 0,
+            parent_placement: 0,
+            offset_h: 0,
+            offset_v: 0,
             selector: Selector::Visible,
             free: false,
         }
@@ -154,6 +166,12 @@ impl Default for Command {
 }
 
 impl Command {
+    /// Whether the placement is positioned relative to another (`P` given). `Q`, `H` and `V`
+    /// without `P` mean nothing and are ignored, as an unknown key is.
+    pub fn is_relative(&self) -> bool {
+        self.parent_image != 0
+    }
+
     /// Read the control data. A key that fails to parse makes the command invalid, but the ids
     /// before it are kept, so the program can still be told which command failed.
     pub fn parse(control: &[u8]) -> (Command, Option<Error>) {
@@ -204,7 +222,9 @@ impl Command {
                     b'p' => Action::Put,
                     b'd' => Action::Delete,
                     b'q' => Action::Query,
-                    b'f' | b'a' | b'c' => Action::Animation,
+                    b'f' => Action::Frame,
+                    b'a' => Action::Animate,
+                    b'c' => Action::Compose,
                     _ => return Err(Error::Invalid("an action the protocol does not have")),
                 }
             }
@@ -241,10 +261,10 @@ impl Command {
             b'z' => self.z = signed()?,
             b'C' => self.cursor_stays = unsigned()? == 1,
             b'U' => self.unicode_placeholder = unsigned()? == 1,
-            b'P' | b'Q' | b'H' | b'V' => {
-                signed()?;
-                self.relative = true;
-            }
+            b'P' => self.parent_image = unsigned()?,
+            b'Q' => self.parent_placement = unsigned()?,
+            b'H' => self.offset_h = signed()?,
+            b'V' => self.offset_v = signed()?,
             b'd' => {
                 let c = letter()?;
                 self.free = c.is_ascii_uppercase();
@@ -307,8 +327,13 @@ mod tests {
         assert_eq!(parse("q=1").quiet, Quiet::NoOk);
         assert_eq!(parse("t=f").medium, Medium::Elsewhere);
         assert_eq!(parse("a=q").action, Action::Query);
-        assert_eq!(parse("a=f").action, Action::Animation);
-        assert!(parse("P=3,H=1").relative);
+        assert_eq!(parse("a=f").action, Action::Frame);
+        assert_eq!(parse("a=a").action, Action::Animate);
+        assert_eq!(parse("a=c").action, Action::Compose);
+        let c = parse("P=3,Q=4,H=-5,V=6");
+        assert!(c.is_relative());
+        assert_eq!((c.parent_image, c.parent_placement, c.offset_h, c.offset_v), (3, 4, -5, 6));
+        assert!(!parse("Q=4,H=1").is_relative(), "no parent picture, no relative placement");
     }
 
     #[test]

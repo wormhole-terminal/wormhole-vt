@@ -14,6 +14,17 @@ First public release (0.1.0).
 
 ### Added
 
+- kitty graphics: animation frames. `a=f` transmits a frame (a rectangle, a base frame or colour, a
+  blend mode, a gap, editing an existing frame), `a=a` sets the state, loops, current frame and gaps,
+  `a=c` composes a rectangle of one frame onto another, and `a=d,d=f` deletes a frame (kitty's rules). The engine
+  keeps the plan (`Terminal::animation`, `Animation::start` and `Animation::tick` for a host to
+  play it with its own clock) and counts every frame's canvas against the picture budget (`ENOSPC`
+  past it; at most `MAX_FRAMES` frames a picture). The host gets `Event::ImageFrame`,
+  `Event::ImageCompose`, `Event::ImageFrameDeleted` and `Event::ImageAnimation`, and answers a
+  frame's decoding with `Terminal::frame_decoded`.
+- kitty graphics: relative placements (`P`, `Q`, `H`, `V`), also relative to the placeholders of a
+  virtual placement. A child follows its parent and goes with it; chains of up to 8, cycles refused
+  (`ECYCLE`, `ETOODEEP`, `ENOPARENT`).
 - VT52 mode: `CSI ? 2 l` (DECANM reset) makes the terminal read the VT52's sequences (cursor moves,
   `ESC Y` direct addressing, `ESC F` and `ESC G` graphics, `ESC H`, `I`, `J`, `K`, `Z` answered
   `ESC / Z`, `ESC =` and `ESC >`) and `ESC <` leaves it, at VT100 level as the VT510 manual and xterm have it. `Modes::VT52`, and the key encoder sends the

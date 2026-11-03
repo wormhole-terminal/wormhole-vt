@@ -181,6 +181,10 @@ impl Terminal {
     /// equals, which is the order to draw them in. Each has its cells, the part of the picture
     /// to show and how it is sized; see [`ImagePlacement`]. Cheap: no allocation once `out` has
     /// grown, and nothing at all while no picture is placed.
+    ///
+    /// A placement relative to another (kitty's `P`, `Q`) is where its parent is; relative to a
+    /// virtual placement, where that one's placeholder cells in view start. Costs a pass over the
+    /// placements, with an allocation, while any placement is relative.
     pub fn placements(&self, out: &mut Vec<ImagePlacement>) {
         self.grid.copy_placements(out, self.cell_px);
     }

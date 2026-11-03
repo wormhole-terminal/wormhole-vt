@@ -31,6 +31,15 @@ pub(in crate::terminal) enum Error {
     /// A file, shared memory or a feature this terminal does not do (`EBADF`: as every file
     /// failure must answer alike, so that a program learns nothing about files it cannot read).
     Unsupported(&'static str),
+    /// No room for it in the picture budget, and nothing may be evicted to make some (`ENOSPC`).
+    NoSpace,
+    /// A relative placement whose chain of parents is longer than this terminal follows
+    /// (`ETOODEEP`).
+    TooDeep,
+    /// A relative placement that would be its own ancestor (`ECYCLE`).
+    Cycle,
+    /// A relative placement whose parent does not exist (`ENOPARENT`).
+    NoParent,
 }
 
 impl Error {
@@ -41,6 +50,10 @@ impl Error {
             Error::NotFound => "ENOENT",
             Error::BadData(_) => "ENODATA",
             Error::Unsupported(_) => "EBADF",
+            Error::NoSpace => "ENOSPC",
+            Error::TooDeep => "ETOODEEP",
+            Error::Cycle => "ECYCLE",
+            Error::NoParent => "ENOPARENT",
         }
     }
 
@@ -48,7 +61,11 @@ impl Error {
         match self {
             Error::Invalid(what) | Error::BadData(what) | Error::Unsupported(what) => what,
             Error::TooBig => "the image is bigger than this terminal keeps",
-            Error::NotFound => "no image with that id",
+            Error::NotFound => "no such image or frame",
+            Error::NoSpace => "no room in the picture budget for another frame",
+            Error::TooDeep => "the chain of parent placements is too long",
+            Error::Cycle => "the placement would be its own parent",
+            Error::NoParent => "the parent placement does not exist",
         }
     }
 }
@@ -122,7 +139,7 @@ mod tests {
         assert_eq!(text(numbered.render(Ok(()))), "\x1b_Gi=4,I=5,p=6;OK\x1b\\");
         assert_eq!(
             text(target(3).render(Err(Error::NotFound))),
-            "\x1b_Gi=3;ENOENT:no image with that id\x1b\\"
+            "\x1b_Gi=3;ENOENT:no such image or frame\x1b\\"
         );
         assert_eq!(
             text(Target { number: 5, ..Target::default() }.render(Err(Error::TooBig))).as_str().get(..9),
@@ -132,6 +149,10 @@ mod tests {
         assert!(text(target(1).render(Err(Error::Invalid("x")))).contains("EINVAL:x"));
         assert!(text(target(1).render(Err(Error::BadData("x")))).contains("ENODATA:x"));
         assert!(text(target(1).render(Err(Error::Unsupported("x")))).contains("EBADF:x"));
+        assert!(text(target(1).render(Err(Error::NoSpace))).contains("ENOSPC:"));
+        assert!(text(target(1).render(Err(Error::TooDeep))).contains("ETOODEEP:"));
+        assert!(text(target(1).render(Err(Error::Cycle))).contains("ECYCLE:"));
+        assert!(text(target(1).render(Err(Error::NoParent))).contains("ENOPARENT:"));
     }
 
     #[test]

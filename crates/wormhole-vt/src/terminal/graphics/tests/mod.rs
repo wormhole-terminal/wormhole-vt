@@ -4,6 +4,7 @@
 //! pieces (`pieces`), limits and hostile input (`limits`), and the check of the tables
 //! (`invariants`). Each cites the section of the protocol document it checks.
 
+mod animation;
 mod delete;
 mod invariants;
 mod iterm;
@@ -11,6 +12,7 @@ mod kitty;
 mod limits;
 mod pieces;
 mod place;
+mod relative;
 mod screen;
 mod sixel;
 
@@ -86,4 +88,15 @@ pub(super) fn placed(rig: &Rig) -> Vec<ImagePlacement> {
 /// (picture id, line, column, cols, rows) of each placement in the view.
 pub(super) fn spots(rig: &Rig) -> Vec<(u32, i32, usize, usize, usize)> {
     placed(rig).iter().map(|p| (p.image_id, p.line.0, p.column, p.cols, p.rows)).collect()
+}
+
+/// The frame uploads among the events since the last call.
+pub(super) fn frame_uploads(rig: &mut Rig) -> Vec<crate::terminal::FrameUpload> {
+    rig.events()
+        .into_iter()
+        .filter_map(|event| match event {
+            Event::ImageFrame(upload) => Some(upload),
+            _ => None,
+        })
+        .collect()
 }

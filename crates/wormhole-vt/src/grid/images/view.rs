@@ -47,15 +47,37 @@ impl Hit {
     }
 }
 
-pub(super) fn hit(p: &Placement, top: i64, screen_rows: usize, grid_cols: usize) -> Hit {
+/// A placement as a delete asks about it; `origin` is where it starts (its top row's serial and
+/// column, see `Grid::origin`). One that is not shown covers nothing.
+pub(super) fn hit(
+    p: &Placement,
+    origin: Option<(i64, i64)>,
+    top: i64,
+    screen_rows: usize,
+    grid_cols: usize,
+) -> Hit {
+    let shown = origin.filter(|&(_, col)| col >= 0 && col < grid_cols as i64);
+    let Some((serial, col)) = shown else {
+        return Hit {
+            image: p.spec.image,
+            placement_id: p.spec.id,
+            z: p.spec.z,
+            line: i64::MIN / 2,
+            rows: 0,
+            column: 0,
+            cols: 0,
+            screen_rows,
+        };
+    };
+    let col = col as usize;
     Hit {
         image: p.spec.image,
         placement_id: p.spec.id,
         z: p.spec.z,
-        line: p.top - top,
+        line: serial - top,
         rows: p.spec.rows,
-        column: p.col,
-        cols: p.spec.cols.min(grid_cols.saturating_sub(p.col)),
+        column: col,
+        cols: p.spec.cols.min(grid_cols.saturating_sub(col)),
         screen_rows,
     }
 }
@@ -73,12 +95,23 @@ impl Grid {
         let top = self.top_serial() as i64;
         let first = -(self.offset as i64);
         let last = first + self.rows as i64 - 1;
-        for p in &self.placements.list {
-            let line = p.top - top;
-            if line + p.spec.rows as i64 - 1 < first || line > last {
+        // Placeholders are looked for in the view; nothing relative: the stored places.
+        let resolved = self.resolved(first, self.rows);
+        for (i, p) in self.placements.list.iter().enumerate() {
+            let origin = match &resolved {
+                Some(all) => all.get(i).copied().flatten(),
+                None => Some((p.top, p.col as i64)),
+            };
+            let Some((serial, col)) = origin else { continue };
+            // A column left of the screen or right of it has no cell to start in.
+            if col < 0 || col >= self.cols as i64 {
                 continue;
             }
-            if let Some(shown) = shown(p, line, self.cols, cell) {
+            let line = serial - top;
+            if line.saturating_add(p.spec.rows as i64) - 1 < first || line > last {
+                continue;
+            }
+            if let Some(shown) = shown(p, line, col as usize, self.cols, cell) {
                 out.push(shown);
             }
         }
@@ -87,9 +120,15 @@ impl Grid {
 }
 
 /// The placement as drawn: cut at the right edge of a screen `grid_cols` wide.
-fn shown(p: &Placement, line: i64, grid_cols: usize, (cell_w, _): (u16, u16)) -> Option<ImagePlacement> {
+fn shown(
+    p: &Placement,
+    line: i64,
+    column: usize,
+    grid_cols: usize,
+    (cell_w, _): (u16, u16),
+) -> Option<ImagePlacement> {
     let spec = &p.spec;
-    let cols = spec.cols.min(grid_cols.checked_sub(p.col)?);
+    let cols = spec.cols.min(grid_cols.checked_sub(column)?);
     let mut source = spec.source;
     let mut extent = spec.extent;
     if cols < spec.cols {
@@ -111,7 +150,7 @@ fn shown(p: &Placement, line: i64, grid_cols: usize, (cell_w, _): (u16, u16)) ->
         image_id: spec.image_id,
         placement_id: spec.id,
         line: Line(line.clamp(i64::from(i32::MIN), i64::from(i32::MAX)) as i32),
-        column: p.col,
+        column,
         cols,
         rows: spec.rows,
         source: SourceRect { ..source },
