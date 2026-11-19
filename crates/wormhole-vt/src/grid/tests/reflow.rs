@@ -17,14 +17,84 @@ fn cursor(sim: &Sim) -> Point {
 #[test]
 fn a_soft_wrapped_line_is_rewrapped_narrower_and_wider() {
     let mut sim = Sim::new(20, 6, DEFAULT_SCROLLBACK_BYTES);
-    sim.print("hello world");
+    sim.print("hello world\n");
     let c = sim.grid.resize(5, 6, cursor(&sim), true);
-    assert_eq!(screen(&sim.grid)[..3], ["hello", " worl", "d"]);
-    assert_eq!(c, at(2, 1), "the cursor is after the d");
+    assert_eq!(screen(&sim.grid)[..4], ["hello", " worl", "d", ""]);
+    assert_eq!(c, at(3, 0), "the cursor is on the line after");
     ok(&sim.grid);
     let c = sim.grid.resize(20, 6, c, true);
-    assert_eq!(screen(&sim.grid)[0], "hello world");
-    assert_eq!(c, at(0, 11));
+    assert_eq!(screen(&sim.grid)[..2], ["hello world", ""]);
+    assert_eq!(c, at(1, 0));
+    ok(&sim.grid);
+}
+
+/// What zsh and readline count on: see `resize.rs`.
+#[test]
+fn the_rows_of_the_cursors_line_stay_rows_on_a_wider_screen() {
+    let mut sim = Sim::new(5, 6, DEFAULT_SCROLLBACK_BYTES);
+    sim.print("above\nprompt> typed");
+    assert_eq!(screen(&sim.grid)[..4], ["above", "promp", "t> ty", "ped"]);
+    let c = sim.grid.resize(20, 6, cursor(&sim), true);
+    assert_eq!(screen(&sim.grid)[..5], ["above", "promp", "t> ty", "ped", ""]);
+    assert_eq!(c, at(3, 3), "as many rows under the first of its line as before");
+    assert!((0..6).all(|y| !sim.grid.is_wrapped(Line(y))), "a row that goes on is full, and these are not");
+    ok(&sim.grid);
+    // Each is a line now: the next width leaves them alone too.
+    let c = sim.grid.resize(30, 6, c, true);
+    assert_eq!(logical_lines(&sim.grid)[..4], ["above", "promp", "t> ty", "ped"]);
+    assert_eq!(c, at(3, 3));
+    ok(&sim.grid);
+}
+
+#[test]
+fn a_narrower_screen_rewraps_the_cursors_line_like_any_other() {
+    let mut sim = Sim::new(10, 6, DEFAULT_SCROLLBACK_BYTES);
+    sim.print("above\nprompt> typed");
+    let c = sim.grid.resize(5, 6, cursor(&sim), true);
+    assert_eq!(screen(&sim.grid)[..4], ["above", "promp", "t> ty", "ped"]);
+    assert_eq!(logical_lines(&sim.grid)[..2], ["above", "prompt> typed"]);
+    assert_eq!(c, at(3, 3));
+    ok(&sim.grid);
+}
+
+#[test]
+fn only_the_cursors_line_stays_as_it_is_on_a_wider_screen() {
+    // Three lines of two rows each, under a history; the cursor is on the first row of the middle one.
+    let mut sim = Sim::new(5, 6, DEFAULT_SCROLLBACK_BYTES);
+    sim.print("1\n2\n3\n4\nover it\nAT THE cur\nunder t");
+    assert_eq!(sim.grid.history_len(), 4);
+    assert_eq!(screen(&sim.grid), ["over", "it", "AT TH", "E cur", "under", " t"]);
+    let c = sim.grid.resize(12, 6, at(2, 1), true);
+    assert_eq!(screen(&sim.grid), ["3", "4", "over it", "AT TH", "E cur", "under t"]);
+    assert_eq!(c, at(3, 1), "still on the T");
+    assert!((0..6).all(|y| !sim.grid.is_wrapped(Line(y))));
+    ok(&sim.grid);
+}
+
+#[test]
+fn the_rows_of_the_cursors_line_above_the_screen_are_joined() {
+    // A line of five rows, the last three of them on the screen, under two lines of two rows.
+    let mut sim = Sim::new(5, 3, DEFAULT_SCROLLBACK_BYTES);
+    sim.print("first 1\nsecond2\n0123456789abcdefghijklm");
+    assert_eq!(sim.grid.history_len(), 6);
+    assert_eq!(screen(&sim.grid), ["abcde", "fghij", "klm"]);
+    let c = sim.grid.resize(40, 3, cursor(&sim), true);
+    assert_eq!(logical_lines(&sim.grid), ["first 1", "second2", "0123456789", "abcde", "fghij", "klm"]);
+    assert_eq!(screen(&sim.grid), ["abcde", "fghij", "klm"]);
+    assert_eq!(c, at(2, 3));
+    ok(&sim.grid);
+}
+
+#[test]
+fn a_cursors_line_that_goes_on_under_the_screen_keeps_its_last_row_too() {
+    // The bottom row says the line goes on: there is no row after it to look at.
+    let mut sim = Sim::new(5, 3, DEFAULT_SCROLLBACK_BYTES);
+    sim.print("ab\n0123456789");
+    sim.grid.set_wrapped(2, true);
+    let c = sim.grid.resize(9, 3, at(1, 0), true);
+    assert_eq!(screen(&sim.grid), ["ab", "01234", "56789"]);
+    assert_eq!(c, at(1, 0));
+    assert!((0..3).all(|y| !sim.grid.is_wrapped(Line(y))));
     ok(&sim.grid);
 }
 
@@ -73,8 +143,8 @@ fn wide_characters_are_never_split() {
     assert!(sim.grid.is_wrapped(Line(0)) && sim.grid.is_wrapped(Line(1)) && !sim.grid.is_wrapped(Line(2)));
     assert_eq!(c, at(2, 0), "on the d, where the cursor of a full row waits");
     ok(&sim.grid);
-    // Back wider the spacer head goes.
-    sim.grid.resize(10, 6, c, true);
+    // Back wider the spacer head goes (with the cursor on another line: its own line's rows stay).
+    sim.grid.resize(10, 6, at(3, 0), true);
     assert_eq!(screen(&sim.grid)[0], "ab日本語cd");
     assert!(sim.grid.cell(at(0, 4)).is_some_and(|cell| cell.is_wide()));
     ok(&sim.grid);
@@ -101,7 +171,7 @@ fn styles_marks_and_links_go_with_their_text() {
     assert_eq!(sim.grid.link_at(at(2, 0)), None);
     assert_eq!(sim.grid.marks_at(at(2, 1)), &['\u{301}']);
     ok(&sim.grid);
-    sim.grid.resize(30, 6, at(0, 0), true);
+    sim.grid.resize(30, 6, at(4, 0), true);
     assert_eq!(sim.grid.link_at(at(0, 4)), Some(link));
     assert_eq!(screen(&sim.grid)[0], "red link e\u{301}nd");
     ok(&sim.grid);
@@ -250,11 +320,11 @@ fn history_lines_wrapped_across_the_screen_edge_are_joined() {
     // One long line that starts in the history and ends on the screen.
     let mut sim = Sim::new(5, 3, DEFAULT_SCROLLBACK_BYTES);
     sim.print("a\nb\n");
-    sim.print("0123456789abcdefghij");
-    assert!(sim.grid.history_len() > 0);
+    sim.print("0123456789abcdefghij\n");
+    assert_eq!(sim.grid.history_len(), 4, "its first two rows are above the screen");
     let c = sim.grid.resize(20, 3, cursor(&sim), true);
     assert_eq!(logical_lines(&sim.grid), ["a", "b", "0123456789abcdefghij"]);
-    assert_eq!(sim.grid.history_len(), 0);
+    assert_eq!(sim.grid.history_len(), 1);
     assert_eq!(c.line.0, 2);
     ok(&sim.grid);
 }
@@ -348,7 +418,8 @@ fn the_history_cap_holds_after_a_reflow() {
 
 const WORDS: [&str; 10] = ["a", "bc", "lorem", "ipsum", "x", "dolor", "日", "本語", "e\u{301}", "ok"];
 
-fn random_text(rng: &mut Rng, sim: &mut Sim, wide: bool) {
+/// Whether the text ends in a line that is not ended, the cursor after it.
+fn random_text(rng: &mut Rng, sim: &mut Sim, wide: bool) -> bool {
     let lines = rng.range(1, 12);
     for _ in 0..lines {
         let words = rng.range(0, 14);
@@ -366,9 +437,22 @@ fn random_text(rng: &mut Rng, sim: &mut Sim, wide: bool) {
         }
         sim.print("\n");
     }
-    if rng.chance(50) {
+    let prompt = rng.chance(50);
+    if prompt {
         sim.print("prompt> typed");
     }
+    prompt
+}
+
+/// The lines of `grid` are `before`; with `prompt` the last of them, which the cursor is on, may be
+/// cut into the rows it had when the screen grew wider (a blank that ends such a row ends a line
+/// now, and is not text).
+fn check_lines(grid: &Grid, before: &[String], prompt: bool, context: &str) {
+    let now = logical_lines(grid);
+    let whole = before.len() - usize::from(prompt);
+    assert_eq!(now[..whole.min(now.len())], before[..whole], "{context}");
+    let joined = |lines: &[String]| lines.concat().replace(' ', "");
+    assert_eq!(joined(&now[whole.min(now.len())..]), joined(&before[whole..]), "{context}");
 }
 
 /// Every row of a logical line but its last is full, and the last isn't marked wrapped.
@@ -394,7 +478,7 @@ fn reflow_property(wide: bool) {
         let mut rng = Rng::new(seed * 2_654_435_761);
         let (cols, rows) = (rng.range(4, 30), rng.range(2, 10));
         let mut sim = Sim::new(cols, rows, 1 << 24);
-        random_text(&mut rng, &mut sim, wide);
+        let prompt = random_text(&mut rng, &mut sim, wide);
         let before = logical_lines(&sim.grid);
         let mut c = cursor(&sim);
         let mut rows_now = rows;
@@ -408,13 +492,13 @@ fn reflow_property(wide: bool) {
             if let Err(e) = sim.grid.check_invariants() {
                 panic!("{e}: {context}");
             }
-            assert_eq!(logical_lines(&sim.grid), before, "{context}");
+            check_lines(&sim.grid, &before, prompt, &context);
             check_wrapping(&sim.grid);
             assert!((c.line.0 as usize) < rows_now && c.column.0 < new_cols, "{context}: cursor {c:?}");
         }
         // And back to the start: the same text on the same width.
         sim.grid.resize(cols, rows, c, true);
-        assert_eq!(logical_lines(&sim.grid), before, "seed {seed} round trip");
+        check_lines(&sim.grid, &before, prompt, &format!("seed {seed} round trip"));
         sim.check();
     }
 }

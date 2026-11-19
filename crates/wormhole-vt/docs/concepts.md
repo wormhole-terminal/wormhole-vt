@@ -129,7 +129,8 @@ without getting a blank line. You will meet it when you draw the cursor: with a 
 is reported on the last column.
 
 A row that was continued by wrapping is marked as **soft-wrapped**. Resizing rewraps soft-wrapped lines.
-Hard line breaks stay.
+Hard line breaks stay. The one line a wider screen does not join is the cursor's: the program that drew
+it (a shell's line editor) counts its rows to draw it again.
 
 ```rust
 use wormhole_vt::{Line, Terminal};

@@ -129,6 +129,10 @@ What happens:
   nothing.
 - **The main screen is reflowed.** Soft-wrapped lines are rewrapped to the new width, the cursor and the
   pins move with their text, and history is rewrapped too. Hard line breaks stay.
+- **The line the cursor is on is not joined when the screen gets wider.** Its rows on the screen stay as
+  they are, each a line of its own. A shell's line editor moves up as many rows as its prompt and command
+  had above the cursor and draws them again after `SIGWINCH`; joined rows would send it into the line
+  above its prompt.
 - **The alternate screen is cropped or padded.** Full-screen programs redraw after `SIGWINCH`.
 - A resize ends any scrolling region and left/right margins (the screen they were set on is gone) and
   gives new columns the default tab stops.

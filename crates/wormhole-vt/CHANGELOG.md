@@ -116,6 +116,11 @@ First public release (0.1.0).
 
 ### Fixed
 
+- A wider screen no longer joins the rows of the line the cursor is on: they stay rows, each a line of
+  its own. zsh and readline move up as many rows as their prompt and command had above the cursor before
+  they draw them again, so with a wrapped prompt or a command typed over several rows the joined line
+  sent them into the output above it, which they erased. A program that does not draw again keeps its
+  line cut where the old width cut it.
 - `Terminal::clear_history` counts as ED 3 for the ED 2 that follows it, so a host's "clear buffer" that
   sends ^L next no longer finds the screen it cleared saved back into the history.
 - A prompt a shell draws again without a new `OSC 133;A` (bash's readline after a resize, with the mark

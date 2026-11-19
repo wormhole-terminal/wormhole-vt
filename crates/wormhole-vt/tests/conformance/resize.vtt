@@ -2,15 +2,18 @@
 #
 # xterm itself does not reflow (it cuts and pads lines); this engine does, so these cases are
 # conventions of the engine rather than of a published text. They pin down what must stay true: the text, its order and where the cursor is.
+#
+# One line is left as xterm would leave it when the screen gets wider: the one the cursor is on. The
+# cases at the end say why, with the bytes zsh and bash write after a resize.
 
 test widening joins a wrapped row
 convention rows that were wrapped by autowrap are one line again when the screen is wide enough
 size 5 4
-feed abcdefgh
+feed abcdefgh\r\n
 resize 10 4
 screen
 |abcdefgh|
-cursor 1,9
+cursor 2,1
 wrapped 1 no
 
 test narrowing keeps the text of a long row
@@ -53,12 +56,12 @@ screen
 test narrowing and widening again restores the line
 convention reflow is lossless for plain text
 size 10 4
-feed abcdefghijkl
+feed abcdefghijkl\r\n
 resize 5 4
 resize 10 4
 lines
 |abcdefghijkl|
-cursor *,3
+cursor *,1
 
 test growing the height adds blank rows below
 convention with no history the new rows are blank and the content stays where it was
@@ -93,7 +96,7 @@ cursor 1,5
 test resizing keeps the rendition of the text
 convention reflow keeps the cell attributes with the text
 size 5 4
-feed \e[31mabcdefg
+feed \e[31mabcdefg\r\n
 resize 10 4
 cell 1,7 text=g fg=idx:1
 cell 1,1 text=a fg=idx:1
@@ -130,3 +133,106 @@ feed \e[?1049h
 resize 5 4
 feed 1\n2\n3\n4\n5\n6\n
 scrollback-len 0
+
+# The line the cursor is on. zsh's line editor and readline remember on which row of their own text
+# the cursor is. Told of a new size they move up that many rows and draw again, as on a terminal
+# that does not reflow; with the rows above the cursor joined they end in the line over the prompt
+# and erase it. The bytes below are what zsh 5.9 and bash 3.2 wrote in a pseudo-terminal that went
+# from 35 to 103 columns, under a prompt of 63 cells.
+
+test widening leaves the rows of the line the cursor is on
+convention on a wider screen the rows of the cursor's line stay rows, each a line of its own, so the cursor is as many rows under the first of them as the program that drew them remembers
+size 5 4
+feed abcdefgh
+resize 10 4
+screen
+|abcde|
+|fgh|
+cursor 2,4
+wrapped 1 no
+lines
+|abcde|
+|fgh|
+
+test widening leaves a full last row of the cursor's line with the cursor after it
+convention the cursor that waited after the last column of its row stands after the text on the wider screen
+size 5 4
+feed abcdefghij
+resize 10 4
+screen
+|abcde|
+|fghij|
+cursor 2,6
+
+test widening joins the wrapped lines above and below the cursor's
+convention only the line the cursor is on is left as it is
+size 5 6
+feed abcdefgh\r\nijklmnop\r\nqrstuvwx\e[3;2H
+resize 10 6
+screen
+|abcdefgh|
+|ijklm|
+|nop|
+|qrstuvwx|
+cursor 2,2
+
+test narrowing rewraps the line the cursor is on
+convention a narrower screen cuts no text: the cursor's line wraps onto more rows like any other and the cursor stays on its character
+size 10 4
+feed abcdefghijkl\e[2;1H
+resize 5 4
+screen
+|abcde|
+|fghij|
+|kl|
+cursor 3,1
+wrapped 1 yes
+wrapped 2 yes
+
+test zsh draws its wrapped prompt again on a wider screen and the line above it stays
+convention zsh goes to the first column, up the one row its prompt had above the cursor, erases to the end of the screen and writes the prompt
+size 35 5
+feed above-the-prompt\r\n
+repeat 61 p
+feed %\s
+cursor 3,29
+resize 103 5
+cursor 3,29
+feed \r\r\e[A\e[0m\e[27m\e[24m\e[J
+repeat 61 p
+feed %\s
+screen
+|above-the-prompt|
+|ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp%|
+cursor 2,64
+
+test zsh draws a command typed over three rows again on a wider screen and the line above it stays
+convention zsh goes up the two rows its prompt and command had above the cursor, in two steps, before it erases and writes both
+size 35 6
+feed above-the-prompt\r\n
+repeat 61 p
+feed %\sls -la some-file
+cursor 4,10
+resize 103 6
+feed \e[A\r\r\e[A\e[0m\e[27m\e[24m\e[J
+repeat 61 p
+feed %\sls -la some-file\r\r\n\e[K\e[A\e[79C
+screen
+|above-the-prompt|
+|ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp% ls -la some-file|
+cursor 2,80
+
+test bash draws its wrapped prompt again on a wider screen and the line above it stays
+convention readline goes to the first column, erases the row, goes up the one row its prompt had above the cursor and writes the prompt over it
+size 35 5
+feed above-the-prompt\r\n
+repeat 61 p
+feed %\s
+resize 103 5
+feed \r\e[K\e[A
+repeat 61 p
+feed %\s
+screen
+|above-the-prompt|
+|ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp%|
+cursor 2,64

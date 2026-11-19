@@ -11,6 +11,14 @@
 //!   background (erased with a color) are kept.
 //! - **The cursor is carried along** to the same character. A cursor past the end of its line's text
 //!   (a prompt, waiting) stays right after the text, on a row of its own if the text filled the last.
+//! - **The cursor's line is not joined on a wider screen.** Its rows on the screen stay as they are,
+//!   and each becomes a line. A line editor (zsh's, readline) remembers on which row of its own text
+//!   the cursor is; told of the new size it moves up that many rows, erases from there and draws
+//!   again, as on a terminal that does not reflow. With the rows above the cursor joined that leads
+//!   into the line over its prompt, which it then erases. A program that draws again replaces the
+//!   rows at once; under one that does not, the line stays cut where the old width cut it. Narrower,
+//!   the line is rewrapped like any other: cutting it would lose text, and the editor's old rows are
+//!   then left above its new ones.
 //! - **Height.** When the screen is full (the cursor or the last text is on its bottom row), it is
 //!   bottom-aligned: growing pulls rows back from the history, shrinking pushes the top rows into
 //!   it, and the cursor stays on the bottom row. When there is blank space under the text, the
@@ -156,5 +164,19 @@ impl Grid {
             self.end -= k as u64;
             n -= k;
         }
+    }
+
+    /// The old rows that a rewrap to `cols` leaves as rows: on a wider screen, those of the line the
+    /// cursor (on the row `cursor`, a serial) is on that go on in the next, from the top of the
+    /// screen down. The line's last row needs no keeping: it is a row either way. See the module docs.
+    pub(super) fn rows_to_keep(&self, cols: usize, cursor: u64) -> std::ops::Range<u64> {
+        let top = self.top_serial();
+        let goes_on = |serial: &u64| self.is_wrapped(Line((serial - top) as i32));
+        if cols <= self.cols {
+            return 0..0;
+        }
+        let first = (top..cursor).rev().take_while(goes_on).last().unwrap_or(cursor);
+        let end = (cursor..self.end).find(|serial| !goes_on(serial)).unwrap_or(self.end);
+        first..end
     }
 }

@@ -169,32 +169,32 @@ exclude_re = [
 
     # -- grid/resize.rs
     # A pin or a picture never sits on the row after the last (`end`): both are cut at it.
-    "resize\\.rs:72:65: replace < with <= in Grid::resize",
-    "resize\\.rs:86:63: replace < with <= in Grid::resize",
+    "resize\\.rs:80:65: replace < with <= in Grid::resize",
+    "resize\\.rs:94:63: replace < with <= in Grid::resize",
     # Where the top row is above the first, the picture is not reflowed (the width is the same,
     # or it was dropped before), so carrying it along puts it back where it was.
-    "resize\\.rs:86:56: replace && with \\|\\| in Grid::resize",
+    "resize\\.rs:94:56: replace && with \\|\\| in Grid::resize",
     # The rows up to the last text and the cursor already reach the cursor's row.
-    "resize\\.rs:111:49: replace \\+ with \\* in Grid::resize",
+    "resize\\.rs:119:49: replace \\+ with \\* in Grid::resize",
     # Where the new end is the old one, nothing is dropped or cut either way (a loop of no rows).
-    "resize\\.rs:117:20: replace > with >= in Grid::resize",
+    "resize\\.rs:125:20: replace > with >= in Grid::resize",
     # The cursor's column is inside the new width before this: every path that gives it one cuts it.
-    "resize\\.rs:141:85: replace - with [/+] in Grid::resize",
+    "resize\\.rs:149:85: replace - with [/+] in Grid::resize",
     # With one page, the rows to drop are fewer than the page has (the screen keeps at least one), so
     # the page is never the whole of them.
-    "resize\\.rs:147:41: replace > with >= in Grid::drop_tail_rows",
+    "resize\\.rs:155:41: replace > with >= in Grid::drop_tail_rows",
 
     # -- grid/rewrap.rs
     # A style is in the line's list and in its map both, so either finds it.
     "rewrap\\.rs:68:42: replace <= with > in LineBuf::style_index",
     # A cell on the end of the line, or past it, goes just after the text either way.
-    "rewrap\\.rs:227:33: replace < with <= in Rewrap::row",
+    "rewrap\\.rs:235:33: replace < with <= in Rewrap::row",
     # Copying no cells is a copy of an empty range, which `copy_from_page` returns from.
-    "rewrap\\.rs:243:16: replace > with >= in Rewrap::copy_row",
+    "rewrap\\.rs:251:16: replace > with >= in Rewrap::copy_row",
     # A wide character is always followed by its second half in the line: the check that it is
     # there never fails.
-    "rewrap\\.rs:294:52: replace \\+ with \\* in Rewrap::emit_line",
-    "rewrap\\.rs:294:56: replace < with <= in Rewrap::emit_line",
+    "rewrap\\.rs:302:52: replace \\+ with \\* in Rewrap::emit_line",
+    "rewrap\\.rs:302:56: replace < with <= in Rewrap::emit_line",
 
     # -- grid/scroll.rs
     # A scroll over several pages that is not rotated is copied row by row, with the same result.

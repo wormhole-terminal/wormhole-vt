@@ -94,6 +94,8 @@ struct Rewrap {
     /// The serial number of the row being filled by a line, and its next column.
     cur: Option<u64>,
     col: usize,
+    /// Old rows (serials) that stay rows of their own, each as wide as it was (`Grid::rows_to_keep`).
+    kept: std::ops::Range<u64>,
 }
 
 impl Grid {
@@ -138,8 +140,9 @@ impl Grid {
     }
 
     /// Rewrap the whole sequence of rows to `cols`; the serial after the last row of the line that
-    /// holds `used_row`.
+    /// holds `used_row`. The cursor is `tracks[0]`.
     pub(super) fn rewrap(&mut self, cols: usize, tracks: &mut Vec<Track>, used_row: u64) -> u64 {
+        let kept = self.rows_to_keep(cols, tracks[0].serial);
         tracks.sort_by_key(|t| t.serial);
         let mut work = Rewrap {
             next: self.shell(cols),
@@ -150,6 +153,7 @@ impl Grid {
             used_end: 0,
             cur: None,
             col: 0,
+            kept,
         };
         let mut serial = self.first_serial();
         let mut old = std::mem::take(&mut self.pages);
@@ -189,12 +193,16 @@ impl Rewrap {
             return;
         }
         let width = self.next.cols;
+        if self.kept.contains(&serial) {
+            // The rows of the line above the screen end as a line before it, and the row is a line
+            // now: it does not fill the new width, which a row that goes on does.
+            self.flush();
+            self.copy_row(page, row, text_end(cells), here, serial);
+            return;
+        }
         if self.line.cells.is_empty() && !wrapped {
             // A line of one row: the common case, copied whole when it fits.
-            let len = cells
-                .iter()
-                .rposition(|c| !(c.is_blank_but_tab() || c.is_spacer_head()))
-                .map_or(0, |p| p + 1);
+            let len = text_end(cells);
             if self.tracks[here.clone()].iter().all(|t| t.col < width) && len <= width {
                 self.copy_row(page, row, len, here, serial);
                 return;
@@ -206,7 +214,7 @@ impl Rewrap {
         let end = if wrapped {
             cells.len() - usize::from(cells.last().is_some_and(|c| c.is_spacer_head()))
         } else {
-            cells.iter().rposition(|c| !(c.is_blank_but_tab() || c.is_spacer_head())).map_or(0, |p| p + 1)
+            text_end(cells)
         };
         for (x, cell) in cells[..end].iter().enumerate() {
             let style = line.style_index(page, cell.style_id());
@@ -363,4 +371,9 @@ impl Rewrap {
             self.emit_line();
         }
     }
+}
+
+/// Where a row's text ends: after the last cell that something was written to.
+fn text_end(cells: &[Cell]) -> usize {
+    cells.iter().rposition(|c| !(c.is_blank_but_tab() || c.is_spacer_head())).map_or(0, |p| p + 1)
 }

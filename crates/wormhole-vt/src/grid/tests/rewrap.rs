@@ -129,7 +129,7 @@ fn a_rewrapped_line_keeps_the_look_of_each_cell() {
     }
     sim.pen = plain();
     sim.print("gh");
-    sim.grid.resize(12, 4, at(1, 2), true);
+    sim.grid.resize(12, 4, at(2, 0), true);
     let looks: Vec<_> = (0..8).map(|x| sim.grid.style_at(at(0, x)).map(|style| style.fg)).collect();
     let indexed = |n| Some(Color::Indexed(n));
     let default = Some(Color::Named(NamedColor::Foreground));
@@ -149,7 +149,7 @@ fn the_looks_of_two_pages_with_the_same_number_are_two_looks_in_a_rewrapped_line
     sim.print("aaaaaa");
     sim.pen = colored(2);
     sim.print("bb");
-    sim.grid.resize(12, 4, at(1, 2), true);
+    sim.grid.resize(12, 4, at(2, 0), true);
     let looks: Vec<_> = (0..8).map(|x| sim.grid.style_at(at(0, x)).map(|style| style.fg)).collect();
     let indexed = |n| Some(Color::Indexed(n));
     assert_eq!(
