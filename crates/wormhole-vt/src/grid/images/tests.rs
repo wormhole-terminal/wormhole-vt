@@ -20,7 +20,7 @@ fn holding(top: i64, col: usize, cols: usize, rows: usize) -> Grid {
         extent: Extent::Fill,
         z: 0,
     };
-    grid.placements.list.push(Placement { spec, top, col });
+    grid.placements.list.push(Placement { spec, top, col, rel: None });
     grid
 }
 

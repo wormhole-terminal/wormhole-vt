@@ -6,7 +6,17 @@ use crate::terminal::graphics::images::Image;
 use crate::types::ImageHandle;
 
 fn picture(handle: u64, id: u32) -> Image {
-    Image { handle: ImageHandle(handle), id, number: 0, width: 1, height: 1, used: 0, virtuals: Vec::new() }
+    Image {
+        handle: ImageHandle(handle),
+        id,
+        number: 0,
+        width: 1,
+        height: 1,
+        used: 0,
+        virtuals: Vec::new(),
+        animation: Default::default(),
+        uploads: 0,
+    }
 }
 
 #[test]

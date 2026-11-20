@@ -7,6 +7,7 @@
 
 use crate::types::ImageHandle;
 
+use super::animation::{Animation, Gap};
 use super::upload::VirtualPlacement;
 
 /// Most pictures one screen keeps, whatever their size.
@@ -27,12 +28,22 @@ pub(super) struct Image {
     /// The tick of the last time it was made or placed.
     pub used: u64,
     pub virtuals: Vec<VirtualPlacement>,
+    /// Its frames' gaps and how it plays. Every frame is a canvas of the picture's size, so each
+    /// one costs as much as the picture itself.
+    pub animation: Animation,
+    /// How many frame uploads the picture has had, to tell the ones waiting for the host apart.
+    pub uploads: u32,
 }
 
 impl Image {
-    /// Bytes it takes decoded, as RGBA.
-    fn cost(&self) -> u64 {
+    /// Bytes of one canvas, decoded, as RGBA: what one frame costs.
+    pub fn frame_cost(&self) -> u64 {
         u64::from(self.width) * u64::from(self.height) * 4
+    }
+
+    /// Bytes it takes decoded, as RGBA, all frames together.
+    fn cost(&self) -> u64 {
+        self.frame_cost() * self.animation.frame_count() as u64
     }
 }
 
@@ -116,6 +127,41 @@ impl ImageTable {
         image
     }
 
+    /// Whether `extra` more bytes fit in `budget`.
+    pub fn has_room(&self, extra: u64, budget: u64) -> bool {
+        self.bytes.saturating_add(extra) <= budget
+    }
+
+    /// Add a frame to the picture at `index`; the caller made room (`has_room`).
+    pub fn push_frame(&mut self, index: usize, gap: Gap) {
+        if let Some(image) = self.list.get_mut(index) {
+            image.animation.push_frame(gap);
+            self.bytes += image.frame_cost();
+        }
+    }
+
+    /// Delete frame `frame` (counted from 0) of the picture at `index`, its canvas's bytes with
+    /// it. False when it has no such frame or only one.
+    pub fn remove_frame(&mut self, index: usize, frame: usize) -> bool {
+        let Some(image) = self.list.get_mut(index) else { return false };
+        let removed = image.animation.remove_frame(frame);
+        if removed {
+            self.bytes = self.bytes.saturating_sub(image.frame_cost());
+        }
+        removed
+    }
+
+    /// The least recently used picture that `keep` accepts, for making room without touching
+    /// what is on show.
+    pub fn evictable(&self, keep: impl Fn(&Image) -> bool) -> Option<usize> {
+        self.list
+            .iter()
+            .enumerate()
+            .filter(|(_, image)| keep(image))
+            .min_by_key(|(_, image)| image.used)
+            .map(|(i, _)| i)
+    }
+
     /// Note a use, so it is evicted last.
     pub fn touch(&mut self, index: usize) {
         self.tick += 1;
@@ -165,12 +211,52 @@ impl ImageTable {
 
 #[cfg(test)]
 mod tests {
-    use super::{Image, ImageTable};
+    use super::{Animation, Image, ImageTable};
     use crate::types::ImageHandle;
 
     /// A picture of 2 by 2 pixels, 16 bytes decoded.
     fn image(handle: u64, id: u32, number: u32) -> Image {
-        Image { handle: ImageHandle(handle), id, number, width: 2, height: 2, used: 0, virtuals: Vec::new() }
+        Image {
+            handle: ImageHandle(handle),
+            id,
+            number,
+            width: 2,
+            height: 2,
+            used: 0,
+            virtuals: Vec::new(),
+            animation: Animation::default(),
+            uploads: 0,
+        }
+    }
+
+    #[test]
+    fn a_frame_costs_as_much_as_the_picture_and_leaves_with_it() {
+        let mut table = ImageTable::default();
+        table.insert(image(1, 1, 0));
+        assert!(table.has_room(16, 32) && !table.has_room(17, 32));
+        table.push_frame(0, super::Gap::Millis(40));
+        table.push_frame(0, super::Gap::Millis(40));
+        assert_eq!(table.check(10, 48), Ok(()), "three canvases of 16 bytes");
+        assert!(table.check(10, 47).is_err());
+        assert!(table.remove_frame(0, 1));
+        assert_eq!(table.check(10, 32), Ok(()));
+        assert!(table.remove_frame(0, 0), "the root frame can go while another is left");
+        assert_eq!(table.check(10, 16), Ok(()));
+        assert!(!table.remove_frame(0, 0) && !table.remove_frame(7, 0));
+        assert_eq!(table.check(10, 16), Ok(()), "the last frame cannot be taken away");
+        table.push_frame(0, super::Gap::Gapless);
+        assert_eq!(table.remove(0).animation.frame_count(), 2);
+        assert_eq!(table.check(10, 0), Ok(()), "a removed picture takes all its frames' bytes with it");
+    }
+
+    #[test]
+    fn evictable_picks_the_oldest_of_those_accepted() {
+        let mut table = ImageTable::default();
+        for handle in 1..=3 {
+            table.insert(image(handle, handle as u32, 0));
+        }
+        assert_eq!(table.evictable(|i| i.handle != ImageHandle(1)), Some(1));
+        assert_eq!(table.evictable(|_| false), None);
     }
 
     #[test]

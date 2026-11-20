@@ -24,7 +24,13 @@ pub wormhole_vt::event::Event::Dcs::replies_before: usize
 pub wormhole_vt::event::Event::FullReset
 pub wormhole_vt::event::Event::HistoryDropped(wormhole_vt::DroppedHistory)
 pub wormhole_vt::event::Event::IconName(alloc::string::String)
+pub wormhole_vt::event::Event::ImageAnimation(wormhole_vt::image::ImageHandle)
+pub wormhole_vt::event::Event::ImageCompose(wormhole_vt::image::FrameCompose)
 pub wormhole_vt::event::Event::ImageData(wormhole_vt::image::ImageUpload)
+pub wormhole_vt::event::Event::ImageFrame(wormhole_vt::image::FrameUpload)
+pub wormhole_vt::event::Event::ImageFrameDeleted
+pub wormhole_vt::event::Event::ImageFrameDeleted::frame: u32
+pub wormhole_vt::event::Event::ImageFrameDeleted::image: wormhole_vt::image::ImageHandle
 pub wormhole_vt::event::Event::ImageFree(wormhole_vt::image::ImageHandle)
 pub wormhole_vt::event::Event::Iterm(alloc::vec::Vec<u8>)
 pub wormhole_vt::event::Event::KittyNotification
@@ -137,6 +143,35 @@ pub mod wormhole_vt::guide::rendering
 pub mod wormhole_vt::guide::security
 pub mod wormhole_vt::guide::tools
 pub mod wormhole_vt::image
+pub enum wormhole_vt::image::AnimationState
+pub wormhole_vt::image::AnimationState::Loading
+pub wormhole_vt::image::AnimationState::Running
+pub wormhole_vt::image::AnimationState::Stopped
+impl core::clone::Clone for wormhole_vt::image::AnimationState
+pub fn wormhole_vt::image::AnimationState::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::AnimationState
+impl core::cmp::PartialEq for wormhole_vt::image::AnimationState
+pub fn wormhole_vt::image::AnimationState::eq(&self, &Self) -> bool
+impl core::default::Default for wormhole_vt::image::AnimationState
+pub fn wormhole_vt::image::AnimationState::default() -> Self
+impl core::fmt::Debug for wormhole_vt::image::AnimationState
+pub fn wormhole_vt::image::AnimationState::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::AnimationState
+impl core::marker::StructuralPartialEq for wormhole_vt::image::AnimationState
+#[non_exhaustive] pub enum wormhole_vt::image::Blend
+pub wormhole_vt::image::Blend::Over
+pub wormhole_vt::image::Blend::Replace
+impl core::clone::Clone for wormhole_vt::image::Blend
+pub fn wormhole_vt::image::Blend::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Blend
+impl core::cmp::PartialEq for wormhole_vt::image::Blend
+pub fn wormhole_vt::image::Blend::eq(&self, &Self) -> bool
+impl core::default::Default for wormhole_vt::image::Blend
+pub fn wormhole_vt::image::Blend::default() -> Self
+impl core::fmt::Debug for wormhole_vt::image::Blend
+pub fn wormhole_vt::image::Blend::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::Blend
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Blend
 #[non_exhaustive] pub enum wormhole_vt::image::Compression
 pub wormhole_vt::image::Compression::None
 pub wormhole_vt::image::Compression::Zlib
@@ -164,6 +199,31 @@ impl core::fmt::Debug for wormhole_vt::image::Extent
 pub fn wormhole_vt::image::Extent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for wormhole_vt::image::Extent
 impl core::marker::StructuralPartialEq for wormhole_vt::image::Extent
+#[non_exhaustive] pub enum wormhole_vt::image::FrameBase
+pub wormhole_vt::image::FrameBase::Color(u32)
+pub wormhole_vt::image::FrameBase::Frame(u32)
+pub wormhole_vt::image::FrameBase::Itself
+impl core::clone::Clone for wormhole_vt::image::FrameBase
+pub fn wormhole_vt::image::FrameBase::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::FrameBase
+impl core::cmp::PartialEq for wormhole_vt::image::FrameBase
+pub fn wormhole_vt::image::FrameBase::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::FrameBase
+pub fn wormhole_vt::image::FrameBase::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::FrameBase
+impl core::marker::StructuralPartialEq for wormhole_vt::image::FrameBase
+pub enum wormhole_vt::image::Gap
+pub wormhole_vt::image::Gap::Gapless
+pub wormhole_vt::image::Gap::Millis(u32)
+impl core::clone::Clone for wormhole_vt::image::Gap
+pub fn wormhole_vt::image::Gap::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Gap
+impl core::cmp::PartialEq for wormhole_vt::image::Gap
+pub fn wormhole_vt::image::Gap::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::Gap
+pub fn wormhole_vt::image::Gap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::Gap
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Gap
 #[non_exhaustive] pub enum wormhole_vt::image::ImageError
 pub wormhole_vt::image::ImageError::BadData
 pub wormhole_vt::image::ImageError::TooBig
@@ -194,6 +254,116 @@ impl core::fmt::Debug for wormhole_vt::image::ImageFormat
 pub fn wormhole_vt::image::ImageFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for wormhole_vt::image::ImageFormat
 impl core::marker::StructuralPartialEq for wormhole_vt::image::ImageFormat
+pub enum wormhole_vt::image::Loops
+pub wormhole_vt::image::Loops::Infinite
+pub wormhole_vt::image::Loops::Passes(u32)
+impl core::clone::Clone for wormhole_vt::image::Loops
+pub fn wormhole_vt::image::Loops::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Loops
+impl core::cmp::PartialEq for wormhole_vt::image::Loops
+pub fn wormhole_vt::image::Loops::eq(&self, &Self) -> bool
+impl core::default::Default for wormhole_vt::image::Loops
+pub fn wormhole_vt::image::Loops::default() -> Self
+impl core::fmt::Debug for wormhole_vt::image::Loops
+pub fn wormhole_vt::image::Loops::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::Loops
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Loops
+pub enum wormhole_vt::image::Tick
+pub wormhole_vt::image::Tick::After
+pub wormhole_vt::image::Tick::After::next: wormhole_vt::image::Position
+pub wormhole_vt::image::Tick::After::wait: core::time::Duration
+pub wormhole_vt::image::Tick::Hold
+impl core::clone::Clone for wormhole_vt::image::Tick
+pub fn wormhole_vt::image::Tick::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Tick
+impl core::cmp::PartialEq for wormhole_vt::image::Tick
+pub fn wormhole_vt::image::Tick::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::Tick
+pub fn wormhole_vt::image::Tick::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::Tick
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Tick
+pub struct wormhole_vt::image::Animation
+impl wormhole_vt::image::Animation
+pub fn wormhole_vt::image::Animation::current(&self) -> usize
+pub fn wormhole_vt::image::Animation::frame_count(&self) -> usize
+pub fn wormhole_vt::image::Animation::gap(&self, usize) -> core::option::Option<wormhole_vt::image::Gap>
+pub fn wormhole_vt::image::Animation::gaps(&self) -> &[wormhole_vt::image::Gap]
+pub fn wormhole_vt::image::Animation::generation(&self) -> u64
+pub fn wormhole_vt::image::Animation::loops(&self) -> wormhole_vt::image::Loops
+pub fn wormhole_vt::image::Animation::pass_duration(&self) -> core::time::Duration
+pub fn wormhole_vt::image::Animation::skip_passes(&self, wormhole_vt::image::Position, core::time::Duration) -> wormhole_vt::image::Skipped
+pub fn wormhole_vt::image::Animation::start(&self) -> wormhole_vt::image::Position
+pub fn wormhole_vt::image::Animation::state(&self) -> wormhole_vt::image::AnimationState
+pub fn wormhole_vt::image::Animation::tick(&self, wormhole_vt::image::Position) -> wormhole_vt::image::Tick
+impl core::clone::Clone for wormhole_vt::image::Animation
+pub fn wormhole_vt::image::Animation::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Animation
+impl core::cmp::PartialEq for wormhole_vt::image::Animation
+pub fn wormhole_vt::image::Animation::eq(&self, &Self) -> bool
+impl core::default::Default for wormhole_vt::image::Animation
+pub fn wormhole_vt::image::Animation::default() -> wormhole_vt::image::Animation
+impl core::fmt::Debug for wormhole_vt::image::Animation
+pub fn wormhole_vt::image::Animation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Animation
+pub struct wormhole_vt::image::FrameCompose
+pub wormhole_vt::image::FrameCompose::blend: wormhole_vt::image::Blend
+pub wormhole_vt::image::FrameCompose::destination: u32
+pub wormhole_vt::image::FrameCompose::from: wormhole_vt::image::FrameRect
+pub wormhole_vt::image::FrameCompose::image: wormhole_vt::image::ImageHandle
+pub wormhole_vt::image::FrameCompose::source: u32
+pub wormhole_vt::image::FrameCompose::to: wormhole_vt::image::FrameRect
+impl core::clone::Clone for wormhole_vt::image::FrameCompose
+pub fn wormhole_vt::image::FrameCompose::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::FrameCompose
+impl core::cmp::PartialEq for wormhole_vt::image::FrameCompose
+pub fn wormhole_vt::image::FrameCompose::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::FrameCompose
+pub fn wormhole_vt::image::FrameCompose::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::FrameCompose
+impl core::marker::StructuralPartialEq for wormhole_vt::image::FrameCompose
+pub struct wormhole_vt::image::FrameRect
+pub wormhole_vt::image::FrameRect::height: u32
+pub wormhole_vt::image::FrameRect::width: u32
+pub wormhole_vt::image::FrameRect::x: u32
+pub wormhole_vt::image::FrameRect::y: u32
+impl core::clone::Clone for wormhole_vt::image::FrameRect
+pub fn wormhole_vt::image::FrameRect::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::FrameRect
+impl core::cmp::PartialEq for wormhole_vt::image::FrameRect
+pub fn wormhole_vt::image::FrameRect::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::FrameRect
+pub fn wormhole_vt::image::FrameRect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::FrameRect
+impl core::marker::StructuralPartialEq for wormhole_vt::image::FrameRect
+pub struct wormhole_vt::image::FrameTicket
+impl core::clone::Clone for wormhole_vt::image::FrameTicket
+pub fn wormhole_vt::image::FrameTicket::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::FrameTicket
+impl core::cmp::PartialEq for wormhole_vt::image::FrameTicket
+pub fn wormhole_vt::image::FrameTicket::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::FrameTicket
+pub fn wormhole_vt::image::FrameTicket::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::FrameTicket
+impl core::marker::StructuralPartialEq for wormhole_vt::image::FrameTicket
+pub struct wormhole_vt::image::FrameUpload
+pub wormhole_vt::image::FrameUpload::base: wormhole_vt::image::FrameBase
+pub wormhole_vt::image::FrameUpload::blend: wormhole_vt::image::Blend
+pub wormhole_vt::image::FrameUpload::compression: wormhole_vt::image::Compression
+pub wormhole_vt::image::FrameUpload::created: bool
+pub wormhole_vt::image::FrameUpload::data: alloc::vec::Vec<u8>
+pub wormhole_vt::image::FrameUpload::format: wormhole_vt::image::ImageFormat
+pub wormhole_vt::image::FrameUpload::frame: u32
+pub wormhole_vt::image::FrameUpload::image: wormhole_vt::image::ImageHandle
+pub wormhole_vt::image::FrameUpload::rect: wormhole_vt::image::FrameRect
+pub wormhole_vt::image::FrameUpload::ticket: wormhole_vt::image::FrameTicket
+impl core::clone::Clone for wormhole_vt::image::FrameUpload
+pub fn wormhole_vt::image::FrameUpload::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::FrameUpload
+impl core::cmp::PartialEq for wormhole_vt::image::FrameUpload
+pub fn wormhole_vt::image::FrameUpload::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::FrameUpload
+pub fn wormhole_vt::image::FrameUpload::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for wormhole_vt::image::FrameUpload
 pub struct wormhole_vt::image::ImageHandle(_)
 impl wormhole_vt::image::ImageHandle
 pub const fn wormhole_vt::image::ImageHandle::from_raw(u64) -> wormhole_vt::image::ImageHandle
@@ -266,6 +436,33 @@ impl core::fmt::Debug for wormhole_vt::image::Placeholder
 pub fn wormhole_vt::image::Placeholder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl core::marker::Copy for wormhole_vt::image::Placeholder
 impl core::marker::StructuralPartialEq for wormhole_vt::image::Placeholder
+pub struct wormhole_vt::image::Position
+pub wormhole_vt::image::Position::frame: usize
+pub wormhole_vt::image::Position::pass: u32
+impl core::clone::Clone for wormhole_vt::image::Position
+pub fn wormhole_vt::image::Position::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Position
+impl core::cmp::PartialEq for wormhole_vt::image::Position
+pub fn wormhole_vt::image::Position::eq(&self, &Self) -> bool
+impl core::default::Default for wormhole_vt::image::Position
+pub fn wormhole_vt::image::Position::default() -> Self
+impl core::fmt::Debug for wormhole_vt::image::Position
+pub fn wormhole_vt::image::Position::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::Position
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Position
+pub struct wormhole_vt::image::Skipped
+pub wormhole_vt::image::Skipped::finished: bool
+pub wormhole_vt::image::Skipped::lag: core::time::Duration
+pub wormhole_vt::image::Skipped::position: wormhole_vt::image::Position
+impl core::clone::Clone for wormhole_vt::image::Skipped
+pub fn wormhole_vt::image::Skipped::clone(&self) -> Self
+impl core::cmp::Eq for wormhole_vt::image::Skipped
+impl core::cmp::PartialEq for wormhole_vt::image::Skipped
+pub fn wormhole_vt::image::Skipped::eq(&self, &Self) -> bool
+impl core::fmt::Debug for wormhole_vt::image::Skipped
+pub fn wormhole_vt::image::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for wormhole_vt::image::Skipped
+impl core::marker::StructuralPartialEq for wormhole_vt::image::Skipped
 pub struct wormhole_vt::image::SourceRect
 pub wormhole_vt::image::SourceRect::height: u32
 pub wormhole_vt::image::SourceRect::width: u32
@@ -296,6 +493,7 @@ pub fn wormhole_vt::image::VirtualPlacement::fmt(&self, &mut core::fmt::Formatte
 impl core::marker::Copy for wormhole_vt::image::VirtualPlacement
 impl core::marker::StructuralPartialEq for wormhole_vt::image::VirtualPlacement
 pub const wormhole_vt::image::IMAGE_BUDGET_BYTES: u64
+pub const wormhole_vt::image::MAX_FRAMES: usize
 pub const wormhole_vt::image::MAX_IMAGES: usize
 pub const wormhole_vt::image::PLACEHOLDER: char
 pub fn wormhole_vt::image::placeholder_at(&wormhole_vt::Cell, wormhole_vt::CellExtra<'_>) -> core::option::Option<wormhole_vt::image::Placeholder>
@@ -1262,7 +1460,13 @@ pub wormhole_vt::Event::Dcs::replies_before: usize
 pub wormhole_vt::Event::FullReset
 pub wormhole_vt::Event::HistoryDropped(wormhole_vt::DroppedHistory)
 pub wormhole_vt::Event::IconName(alloc::string::String)
+pub wormhole_vt::Event::ImageAnimation(wormhole_vt::image::ImageHandle)
+pub wormhole_vt::Event::ImageCompose(wormhole_vt::image::FrameCompose)
 pub wormhole_vt::Event::ImageData(wormhole_vt::image::ImageUpload)
+pub wormhole_vt::Event::ImageFrame(wormhole_vt::image::FrameUpload)
+pub wormhole_vt::Event::ImageFrameDeleted
+pub wormhole_vt::Event::ImageFrameDeleted::frame: u32
+pub wormhole_vt::Event::ImageFrameDeleted::image: wormhole_vt::image::ImageHandle
 pub wormhole_vt::Event::ImageFree(wormhole_vt::image::ImageHandle)
 pub wormhole_vt::Event::Iterm(alloc::vec::Vec<u8>)
 pub wormhole_vt::Event::KittyNotification
@@ -2112,6 +2316,9 @@ impl core::marker::Copy for wormhole_vt::Span
 impl core::marker::StructuralPartialEq for wormhole_vt::Span
 pub struct wormhole_vt::Terminal
 impl wormhole_vt::Terminal
+pub fn wormhole_vt::Terminal::animation(&self, wormhole_vt::image::ImageHandle) -> core::option::Option<&wormhole_vt::image::Animation>
+pub fn wormhole_vt::Terminal::set_animation_current(&mut self, wormhole_vt::image::ImageHandle, usize)
+impl wormhole_vt::Terminal
 pub fn wormhole_vt::Terminal::archive_history(&self) -> bool
 pub fn wormhole_vt::Terminal::set_archive_history(&mut self, bool)
 impl wormhole_vt::Terminal
@@ -2186,6 +2393,8 @@ impl wormhole_vt::Terminal
 pub fn wormhole_vt::Terminal::events(&mut self) -> alloc::vec::drain::Drain<'_, wormhole_vt::Event>
 impl wormhole_vt::Terminal
 pub fn wormhole_vt::Terminal::feed(&mut self, &[u8])
+impl wormhole_vt::Terminal
+pub fn wormhole_vt::Terminal::frame_decoded(&mut self, wormhole_vt::image::FrameTicket, core::result::Result<(), wormhole_vt::image::ImageError>)
 impl wormhole_vt::Terminal
 pub fn wormhole_vt::Terminal::icon_name(&self) -> core::option::Option<&str>
 pub fn wormhole_vt::Terminal::title(&self) -> core::option::Option<&str>

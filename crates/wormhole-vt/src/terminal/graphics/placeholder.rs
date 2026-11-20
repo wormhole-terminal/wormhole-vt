@@ -368,6 +368,12 @@ pub fn placeholder_at(cell: &Cell, extra: CellExtra<'_>) -> Option<Placeholder> 
     Some(Placeholder { image_id, placement_id, row, col })
 }
 
+/// The picture id and the placement id a placeholder cell names: what the grid needs to find the
+/// placeholders of a virtual placement ([`Grid::set_placeholder_key`](crate::grid::Grid)).
+pub(crate) fn key_at(cell: &Cell, extra: CellExtra<'_>) -> Option<(u32, u32)> {
+    placeholder_at(cell, extra).map(|p| (p.image_id, p.placement_id))
+}
+
 /// `text` without its placeholders and their marks, for the clipboard and a saved scrollback: a
 /// copied picture would otherwise be a row of private-use characters.
 pub fn strip_placeholders(text: &str) -> Cow<'_, str> {

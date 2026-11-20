@@ -294,3 +294,55 @@ fn a_string_that_is_passed_through_costs_its_payload() {
     // DCS also its header's numbers and intermediates.
     assert!(count <= 6 * 300 * 20, "{count} allocations for {strings} strings");
 }
+
+/// A terminal with `n` one-cell pictures at its top row and, when `children`, one placement
+/// relative to each of them, a scrolling region under them so that nothing scrolls them away.
+fn with_pictures(n: usize, children: bool) -> Terminal {
+    let mut term = Terminal::builder().size(100, 24).scrollback(0).build();
+    term.set_cell_size(8, 16);
+    let pixels = "AAAA".repeat(128);
+    for i in 1..=n {
+        term.feed(format!("\x1b[1;{}H", i % 90 + 1).as_bytes());
+        term.feed(format!("\x1b_Ga=T,f=24,s=8,v=16,i={i},p=1,C=1,q=2;{pixels}\x1b\\").as_bytes());
+        if children {
+            let id = 1000 + i;
+            term.feed(
+                format!("\x1b_Ga=T,f=24,s=8,v=16,i={id},p=1,P={i},Q=1,V=1,C=1,q=2;{pixels}\x1b\\").as_bytes(),
+            );
+        }
+    }
+    term.events().for_each(drop);
+    term.clear_replies();
+    // Rows 10 to 20 scroll and are erased; the pictures are on rows 1 and 2.
+    term.feed(b"\x1b[10;20r\x1b[20;1H");
+    term
+}
+
+/// Allocations of 200 scrolls of the region and 200 erases of a line in it, with the pictures in place.
+fn scrolls_and_erases(n: usize, children: bool) -> usize {
+    let mut term = with_pictures(n, children);
+    let stream = "\r\n".repeat(200) + &"\x1b[15;1H\x1b[2K".repeat(200);
+    term.feed(stream.as_bytes()); // warm
+    let before = allocations();
+    term.feed(stream.as_bytes());
+    let count = allocations() - before;
+    eprintln!("{n} pictures, children {children}: {count} allocations");
+    let mut placed = Vec::new();
+    term.placements(&mut placed);
+    assert_eq!(placed.len(), if children { 2 * n } else { n }, "the pictures stayed");
+    count
+}
+
+#[test]
+fn scrolls_and_erases_with_pictures_placed_allocate_nothing() {
+    assert_eq!(scrolls_and_erases(60, false), 0);
+}
+
+#[test]
+fn with_relative_placements_a_scroll_or_an_erase_allocates_a_few_vectors_however_many_there_are() {
+    // 400 operations: a pass over the table is a handful of vectors and maps (one allocation
+    // each), not one search per placement or one allocation per parent.
+    let (small, large) = (scrolls_and_erases(8, true), scrolls_and_erases(64, true));
+    assert!(small <= 400 * 12, "{small}");
+    assert!(large <= small + 8, "eight times the placements, the same allocations: {small} then {large}");
+}

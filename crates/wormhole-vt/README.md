@@ -109,7 +109,7 @@ the package, use `cargo test --features internals`.
 | SGR | Bold, dim, italic, underline (single, double, curly, dotted, dashed: `4:0` to `4:5`, `21`), blink, inverse, hidden, strikethrough, overline; 16, 256 and true colours with `;` or `:`; underline colour (58, 59); XTPUSHSGR, XTPOPSGR, XTREPORTSGR |
 | Colours | Palette and dynamic colour set, query and reset: OSC 4, 5, 10 to 19 and 104, 105, 110 to 119, with the host's colours as the answer to a query; XTPUSHCOLORS, XTPOPCOLORS, XTREPORTCOLORS |
 | Strings | Title and icon name with the XTWINOPS stack (OSC 0, 1, 2; `CSI 22/23 t`), OSC 7 (folder), OSC 8 (hyperlinks), OSC 52 (clipboard, as host requests), OSC 133 (shell marks: prompt, command, output, exit code), OSC 9, OSC 9;4 (progress), OSC 99 and OSC 777 (notifications, as host requests), the program status protocol (OSC 7501), OSC 22 (pointer shape) and OSC 1337 `SetUserVar`, both as host events |
-| Images | kitty graphics protocol (including Unicode placeholders), Sixel (decoded by the engine), iTerm2 inline images. The engine owns placement; the host decodes PNG/JPEG and draws |
+| Images | kitty graphics protocol (including Unicode placeholders, relative placements and animation frames), Sixel (decoded by the engine), iTerm2 inline images. The engine owns placement; the host decodes PNG/JPEG and draws |
 | Unicode | Unicode 18 cell widths, extended grapheme clusters (UAX #29) with mode 2027 (on by default), emoji variation selectors, wide characters with spacer cells |
 | Scrollback and reflow | History capped in bytes; soft-wrapped lines rewrap on resize with the cursor and pins carried along; the alternate screen is cropped or padded. Lines that leave the history can be handed to the host (`Event::HistoryDropped`, opt in) |
 | Keyboard | kitty keyboard protocol (five flags, a stack per screen), xterm's modifyOtherKeys, application cursor and keypad modes, bracketed paste, focus reports, the VT52's keys |
@@ -123,7 +123,7 @@ the package, use `cargo test --features internals`.
 Not done, on purpose or for now: the printer (media copy, `CSI Ps i`, is recognised and ignored, and what
 follows it is drawn), pages and panning, the VT500's Greek, Hebrew, Turkish and Cyrillic character sets,
 ReGIS, soft fonts, user-defined keys, the status line, 8-bit GR characters (the input is UTF-8 only),
-kitty's animation frames and its file and shared-memory image media, colour names and the `rgbi:`/`CIE…`
+kitty's file and shared-memory image media, colour names and the `rgbi:`/`CIE…`
 colour forms. The engine never reads files, runs programs or loads fonts.
 
 ## Conformance

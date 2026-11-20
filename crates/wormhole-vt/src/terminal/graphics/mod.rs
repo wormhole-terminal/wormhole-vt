@@ -16,6 +16,8 @@
 //! | `command` | the control keys (`a=T,i=3,c=10,…`) |
 //! | `transmit` | storing a picture: chunks, formats, limits, ids and numbers, eviction |
 //! | `put` | placing a stored picture at the cursor, moving the cursor, virtual placements |
+//! | `animation/` | `a=f`, `a=a`, `a=c`: frames, their gaps, the plan a host plays, the budget they count in |
+//! | `relative` | `a=p` with `P`, `Q`, `H`, `V`: finding the parent, the errors; the rules are the grid's (`grid/images/relative.rs`) |
 //! | `delete` | `a=d`, every selector |
 //! | `reply` | the answers, and keeping them in the order asked |
 //! | `geometry` | cells covered, from pixels, cell size and the keys |
@@ -41,11 +43,18 @@
 //!   placed from before those that something is), at most 4,096 placements are kept per
 //!   screen, and the uploads waiting for the host are capped at 256 MiB. The host can lower each
 //!   of these (`Limits`); lowering the pictures' count or bytes evicts at once.
-//! - **Not done**: animation frames (`a=f`, `a=a`, `a=c`), files and shared memory as the medium
+//! - **Animation** (spec: kitty, "Animation"): the engine keeps each picture's frames' gaps, state,
+//!   loops and current frame, and counts every frame's canvas against the picture budget; the host
+//!   keeps the pixels and the clock, see [`animation`]'s docs for the API and why it is shaped so.
+//! - **Relative placements** (spec: kitty, "Relative placements"): a placement can hang on
+//!   another, or on a virtual placement's placeholders, at an offset in cells. The relation is by
+//!   name, a parent's children go with it, chains are at most 8 deep and cycles are refused.
+//! - **Not done**: files and shared memory as the medium
 //!   (`t=f`, `t=t`, `t=s`: the engine does no I/O, and every one is refused alike with `EBADF`),
-//!   relative placements (`P`, `Q`, `H`, `V`), a compressed PNG, Sixel's private palette
+//!   a compressed PNG, Sixel's private palette
 //!   (mode 1070 is not read; every picture starts with the VT340's colors) and ReGIS.
 
+mod animation;
 mod apc;
 mod command;
 mod delete;
@@ -54,6 +63,7 @@ mod images;
 mod iterm;
 mod placeholder;
 mod put;
+mod relative;
 mod reply;
 mod sixel;
 mod sixel_run;
@@ -65,11 +75,16 @@ mod upload;
 
 use crate::types::ImageHandle;
 
+pub use animation::{
+    Animation, AnimationState, Blend, FrameBase, FrameCompose, FrameRect, FrameTicket, FrameUpload, Gap,
+    Loops, MAX_FRAMES, Position, Skipped, Tick,
+};
 pub use images::{IMAGE_BUDGET_BYTES, MAX_IMAGES};
 pub use placeholder::{Placeholder, placeholder_at, strip_placeholders};
 pub use upload::{Compression, ImageError, ImageFormat, ImageUpload, VirtualPlacement};
 
 pub(super) use apc::PAYLOAD_MAX;
+pub(super) use placeholder::key_at;
 pub(in crate::terminal) use reply::{Error as AnswerError, Target};
 
 use apc::ApcReader;

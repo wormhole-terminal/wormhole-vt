@@ -67,7 +67,8 @@ bitflags! {
         /// Pictures are placed in the grid. Their pixels are the host's and the engine keeps no
         /// encoded source to send again; the placements are not written.
         const PLACEMENTS = 1;
-        /// The engine holds pictures (ids, numbers, virtual placements) that are not written.
+        /// The engine holds pictures (ids, numbers, virtual placements, animation frames) that are
+        /// not written.
         const IMAGES = 1 << 1;
         /// DECCOLM made the screen 132 columns wide: the mode only sets by resizing.
         const COLUMNS_132 = 1 << 2;

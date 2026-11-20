@@ -275,8 +275,12 @@ const STYLE: &[(&str, Coverage)] = &[
     ("attrs", Written("SGR")),
 ];
 
-const PLACEMENT: &[(&str, Coverage)] =
-    &[("spec", Gap("Gaps::PLACEMENTS")), ("top", Gap("Gaps::PLACEMENTS")), ("col", Gap("Gaps::PLACEMENTS"))];
+const PLACEMENT: &[(&str, Coverage)] = &[
+    ("spec", Gap("Gaps::PLACEMENTS")),
+    ("top", Gap("Gaps::PLACEMENTS")),
+    ("col", Gap("Gaps::PLACEMENTS")),
+    ("rel", Gap("Gaps::PLACEMENTS: the parent a placement hangs on")),
+];
 
 /// The structs whose fields make up the engine's state.
 pub const FIELDS: &[StructFields] = &[

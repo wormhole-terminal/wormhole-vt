@@ -23,7 +23,11 @@ impl Grid {
         let full = region.left == 0 && region.right == self.cols - 1;
         let at_screen_top = from == 0;
         let n = n as i64;
+        let before = self.placements.list.len();
         self.placements.list.retain_mut(|p| {
+            if p.rel.is_some() {
+                return true;
+            }
             let bottom = p.end() - 1;
             if bottom < first || p.top > last {
                 return true;
@@ -50,6 +54,9 @@ impl Grid {
                 false
             }
         });
+        if self.placements.list.len() != before {
+            self.drop_orphans();
+        }
         self.all_dirty = true;
     }
 
@@ -62,8 +69,9 @@ impl Grid {
             return;
         }
         let first_below = self.top_serial() as i64 + below as i64;
+        let before = self.placements.list.len();
         self.placements.list.retain_mut(|p| {
-            if p.end() <= first_below {
+            if p.rel.is_some() || p.end() <= first_below {
                 true
             } else if p.top >= first_below {
                 p.top += n as i64;
@@ -72,6 +80,9 @@ impl Grid {
                 false
             }
         });
+        if self.placements.list.len() != before {
+            self.drop_orphans();
+        }
         self.all_dirty = true;
     }
 }
